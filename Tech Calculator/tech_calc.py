@@ -20,15 +20,23 @@ left_handed_angle_strain_forehand = 292.5       # 270 + 45 or 292.5
 # 
 # 
 # 
+
+class swing:
+    __slots__ = 'time', 'angle', 'frequency', 'forehand', 'strain', 'reset'
+    def __init__(self, iTime, iAngle):
+        self.time = iTime
+        self.angle = iAngle
+        self.frequency = 0
+        self.forehand = NULL
+        self.strain = 0
+        self.reset = NULL  
+
 def average(lst):   # Returns the averate of a list of integers
     return sum(lst) / len(lst)
-def margin(num, margin):
-    return
 def bernstein_poly(i, n, t):    # For later
     """
      The Bernstein polynomial of n, i as a function of t
     """
-
     return comb(n, i) * ( t**(n-i) ) * (1 - t)**i
 def bezier_curve(points, nTimes=100):   # For later
     """
@@ -159,16 +167,16 @@ def V2_to_V3(V2mapData: dict):    # Convert V2 JSON to V3
         newMapData['obstacles'][-1]['d'] = V2mapData['_obstacles'][i]['_duration']
         newMapData['obstacles'][-1]['w'] = V2mapData['_obstacles'][i]['_width']
     return newMapData
-def splitMapData(mapData: dict, leftOrRight: int):    # False or 0 = Left, True or 1 = Right, 2 = Bombs
-    if leftOrRight == 0:
+def splitMapData(mapData: dict, type: int):    # False or 0 = Left, True or 1 = Right, 2 = Bombs
+    if type == 0:
         bloqList = [block for block in mapData['colorNotes'] if block['c'] == 0]  #Right handed blocks
-    elif leftOrRight == 1:
+    elif type == 1:
         bloqList = [block for block in mapData['colorNotes'] if block['c'] == 1]  #Left handed blocks
     else:
         bloqList = [bomb for bomb in mapData['bombNotes']]
     return bloqList
 def swingProcesser(mapSplitData: list):    # Returns a list of dictionaries for all swings returning swing angles and timestamps
-    swingData = []
+    swingData: list[swing] = []
     for i in range(0, len(mapSplitData)):
         isSlider = False
         cBlockB = mapSplitData[i]['b']      # Current Block Position in Time in unit [Beats]        
@@ -176,10 +184,10 @@ def swingProcesser(mapSplitData: list):    # Returns a list of dictionaries for 
         cBlockP = [mapSplitData[i]['x'], mapSplitData[i]['y']]
         if i > 0:
             pBlockB = mapSplitData[i-1]['b']    # Pre-cache data for neater code
-            pBlockA = swingData[-1]['angle'] # Previous Block Angle in degrees
+            pBlockA = swingData[-1].angle # Previous Block Angle in degrees
             pBlockP = [mapSplitData[i-1]['x'], mapSplitData[i-1]['y']]
             if mapSplitData[i]['d'] == 8:   #Dot note? Just assume opposite angle. If it's a slider, the program will handle it
-                pBlockA = swingData[-1]['angle']
+                pBlockA = swingData[-1].angle
                 if cBlockB - pBlockB <= 0.03125:
                     cBlockA = pBlockA
                 else:
@@ -191,7 +199,7 @@ def swingProcesser(mapSplitData: list):    # Returns a list of dictionaries for 
             if cBlockB - pBlockB >= 0.03125: # = 1/32 Just a check if notes are unreasonable close, just assume they're apart of the same swing
                 if cBlockB - pBlockB > 0.125: # = 1/8 The upper bound of normal slider precision commonly used
                     if cBlockB - pBlockB > 0.5:    # = 1/2 About the limit of whats reasonable to expect from a slider
-                        swingData.append({'time': cBlockB, 'angle': cBlockA})
+                        swingData.append(swing(cBlockB, cBlockA))
                     else: # 1/2 Check (just to weed out obvious non-sliders) More complicated methods need to be used
                         if abs(cBlockA - pBlockA) < 112.5:  # 90 + 22.5 JUST IN CASE. not the full 90 + 45 since that would be one hell of a slider or dot note
                             try:
@@ -206,15 +214,15 @@ def swingProcesser(mapSplitData: list):    # Returns a list of dictionaries for 
                                 sliderTime = cBlockB - pBlockB
                                 isSlider = True
                             else:
-                                swingData.append({'time': cBlockB, 'angle': cBlockA})
+                                swingData.append(swing(cBlockB, cBlockA))
                         else:
-                            swingData.append({'time': cBlockB, 'angle': cBlockA})
+                            swingData.append(swing(cBlockB, cBlockA))
                 else: # 1/8 Check
                     if mapSplitData[i]['d'] == 8 or abs(cBlockA - pBlockA) < 90: # 90 degree check since 90 degrees is what most would consider the maximum angle for a slider or dot note
                         sliderTime = 0.125
                         isSlider = True
                     else:
-                        swingData.append({'time': cBlockB, 'angle': cBlockA})
+                        swingData.append(swing(cBlockB, cBlockA))
             else:   # 1/32 Check
                 sliderTime = 0.03125
                 isSlider = True
@@ -227,12 +235,12 @@ def swingProcesser(mapSplitData: list):    # Returns a list of dictionaries for 
                         pBlockP = [mapSplitData[blockIndex]['x'], mapSplitData[blockIndex]['y']]
                         break
                 try:
-                    swingData[-1]['angle'] = math.degrees(math.atan((pBlockP[1]-cBlockP[1])/(pBlockP[0]-cBlockP[0]))) % 360 # Replaces angle swing from block angle to slider angle
+                    swingData[-1].angle = math.degrees(math.atan((pBlockP[1]-cBlockP[1])/(pBlockP[0]-cBlockP[0]))) % 360 # Replaces angle swing from block angle to slider angle
                 except ZeroDivisionError:       # Often we get a divide by zero error which is actually 90 or 270 degrees. Try putting a super large number into atan in your calculator ;)
                     if cBlockP[1] > pBlockP[1]:
-                        swingData[-1]['angle'] = 90
+                        swingData[-1].angle = 90
                     else:
-                        swingData[-1]['angle'] = 270
+                        swingData[-1].angle = 270
                 guideAngle = 1150           # A random test value to check later
                 for f in range(1, len(mapSplitData)):       # Checker that will try to find a guiding block (arrow block) for the slider angle prediction.
                     blockIndex = i - f
@@ -242,44 +250,44 @@ def swingProcesser(mapSplitData: list):    # Returns a list of dictionaries for 
                         guideAngle = cut_direction_index[mapSplitData[blockIndex]['d']]
                         break
                 if guideAngle != 1150:      # A test to see if guideAngle was actually changed
-                    if abs(swingData[-1]['angle'] - guideAngle) > 90:       # If this is true, the predicted angle is wrong, likely by 180 degrees wrong
-                        if swingData[-1]['angle'] >= 180:
-                            swingData[-1]['angle'] -= 180               # Apply Fix
+                    if abs(swingData[-1].angle - guideAngle) > 90:       # If this is true, the predicted angle is wrong, likely by 180 degrees wrong
+                        if swingData[-1].angle >= 180:
+                            swingData[-1].angle -= 180               # Apply Fix
                         else:
-                            swingData[-1]['angle'] += 180             
+                            swingData[-1].angle += 180             
         else:
-            swingData.append({'time': cBlockB, 'angle': cBlockA})    # First Note Exception. will never be a slider or need to undergo any test
+            swingData.append(swing(cBlockB, cBlockA))    # First Note Exception. will never be a slider or need to undergo any test
     return swingData
-def swingStrainCalc(swingData: list, leftOrRight): # False or 0 = Left, True or 1 = Right
+def swingStrainCalc(swingData: list[swing], leftOrRight): # False or 0 = Left, True or 1 = Right
     strainAmount = 0
     #TODO calculate strain from angle based on left or right hand
     for i in range(0, len(swingData)):
-        if swingData[i]['forehand']:     #The Formula firse calculates by first normalizing the angle difference (/180) then using
+        if swingData[i].forehand:     #The Formula firse calculates by first normalizing the angle difference (/180) then using
             if leftOrRight:
-                strainAmount += 2 * (((180 - abs(abs(right_handed_angle_strain_forehand - swingData[i]['angle']) - 180)) / 180)**2)          # Right Handed Forehand
+                strainAmount += 2 * (((180 - abs(abs(right_handed_angle_strain_forehand - swingData[i].angle) - 180)) / 180)**2)          # Right Handed Forehand
             else:
-                strainAmount += 2 * (((180 - abs(abs(left_handed_angle_strain_forehand - swingData[i]['angle']) - 180)) / 180)**2)           # Left Handed Forehand
+                strainAmount += 2 * (((180 - abs(abs(left_handed_angle_strain_forehand - swingData[i].angle) - 180)) / 180)**2)           # Left Handed Forehand
         else:
             if leftOrRight:
-                strainAmount += 2 * (((180 - abs(abs(right_handed_angle_strain_forehand - 180 - swingData[i]['angle']) - 180))/180)**2)           # Right Handed Backhand
+                strainAmount += 2 * (((180 - abs(abs(right_handed_angle_strain_forehand - 180 - swingData[i].angle) - 180))/180)**2)           # Right Handed Backhand
             else:
-                strainAmount += 2 * (((180 - abs(abs(left_handed_angle_strain_forehand - 180 - swingData[i]['angle']) - 180))/180)**2)           # Left Handed Backhand
+                strainAmount += 2 * (((180 - abs(abs(left_handed_angle_strain_forehand - 180 - swingData[i].angle) - 180))/180)**2)           # Left Handed Backhand
     return strainAmount
-def patternSplitter(swingData: list):    # Does swing speed analysis to split the long list of dictionaries into smaller lists of patterns containing lists of dictionaries
+def patternSplitter(swingData: list[swing]):    # Does swing speed analysis to split the long list of dictionaries into smaller lists of patterns containing lists of dictionaries
     for i in range(0, len(swingData)):   # Swing Frequency Analyzer
         if i > 0 and i+1 < len(swingData):    # Checks done so we don't try to access data that doesn't exist
-            SF = 2/(swingData[i+1]['time'] - swingData[i-1]['time'])    # Swing Frequency
+            SF = 2/(swingData[i+1].time - swingData[i-1].time)    # Swing Frequency
         else:
             SF = 0
-        swingData[i]['frequency'] = SF
+        swingData[i].frequency = SF
     patternFound = False
-    SFList = [freq['frequency'] for freq in swingData]
+    SFList = [freq.frequency for freq in swingData]
     SFmargin = average(SFList) / 32
     patternList = []            # Pattern List
     tempPlist = []              # Temp Pattern List
     for i in range(0, len(swingData)):
         if i > 0:
-            if (1 / (swingData[i]['time'] - swingData[i-1]['time'])) - swingData[i]['frequency'] <= SFmargin:    # Tries to find Patterns within margin
+            if (1 / (swingData[i].time - swingData[i-1].time)) - swingData[i].frequency <= SFmargin:    # Tries to find Patterns within margin
                 if not patternFound:    # Found a pattern and it's the first one?
                     patternFound = True
                     del tempPlist[-1]
@@ -298,34 +306,34 @@ def patternSplitter(swingData: list):    # Does swing speed analysis to split th
         else:
             tempPlist.append(swingData[0])
     return patternList
-def parityPredictor(patternData: list, bombData: list, leftOrRight):    # Parses through a List of Lists of Dictionaries to calculate the most likely parity for each pattern
+def parityPredictor(patternData: list[list[swing]], bombData: list, leftOrRight):    # Parses through a List of Lists of Dictionaries to calculate the most likely parity for each pattern
     newPatternData = []
     for p in range(0, len(patternData)):
         testData1 = patternData[p]
         testData2 = copy.deepcopy(patternData[p])
         for i in range(0, len(testData1)):  # Build Forehand TestData Build
             if i > 0:
-                testData1[i]['forehand'] = not testData1[i-1]['forehand']     
+                testData1[i].forehand = not testData1[i-1].forehand     
             else:
-                testData1[0]['forehand'] = True
+                testData1[0].forehand = True
         forehandTest = swingStrainCalc(testData1, leftOrRight)    # Test data
         for i in range(0, len(testData2)):  # Build Banckhand Test Data
             if i > 0:
-                testData2[i]['forehand'] = not testData2[i-1]['forehand']     
+                testData2[i].forehand = not testData2[i-1].forehand     
             else:
-                testData2[0]['forehand'] = False
+                testData2[0].forehand = False
         backhandTest = swingStrainCalc(testData2, leftOrRight)    # Test data
         if forehandTest <= backhandTest:    #Prefer forehand starts over backhand if equal
             newPatternData += testData1      # Forehand gave a lower stress value, therefore is the best option in terms of hand placement for the pattern
         elif forehandTest > backhandTest:
             newPatternData += testData2
     for i in range(0, len(newPatternData)):
-        newPatternData[i]['strain'] = swingStrainCalc([newPatternData[i]], leftOrRight)  # Assigns individual strain values to each swing. Done like this in square brackets because the function expects a list.
+        newPatternData[i].strain = swingStrainCalc([newPatternData[i]], leftOrRight)  # Assigns individual strain values to each swing. Done like this in square brackets because the function expects a list.
         if i > 0:
-            if newPatternData[i]['forehand'] == newPatternData[i-1]['forehand']:
-                newPatternData[i]['reset'] = True
+            if newPatternData[i].forehand == newPatternData[i-1].forehand:
+                newPatternData[i].reset = True
             else:
-                newPatternData[i]['reset'] = False
+                newPatternData[i].reset = False
     return newPatternData
 def staminaCalc(swingData: list):
     staminaList: list = []
@@ -355,8 +363,9 @@ def swingCurveCalc(swingData: list):
             curveList[i] = 0
     return curveList
 def combineAndSortList(array1, array2, key):
-    combinedArray = array1 + array2
-    combinedArray = sorted(combinedArray, key=lambda x: x[f'{key}'])  # once combined, sort by time
+    combinedArray: list[swing] = array1 + array2
+    # combinedArray = sorted(combinedArray, key=lambda x: x[f'{key}'])  # once combined, sort by time       # DEPRECIATED
+    combinedArray.sort(key=lambda x: x.time)
     return combinedArray
 def loadInfoData(mapID: str):
     songPath = findSongPath(mapID)
@@ -388,7 +397,7 @@ def calculateTech(mapData):
     RightSwingData = parityPredictor(RightPatternData, bombData, True)
     
     SwingData = combineAndSortList(LeftSwingData, RightSwingData, 'time')
-    StrainList = [strain['strain'] for strain in SwingData]
+    StrainList = [strain.strain for strain in SwingData]
     tech = average(StrainList)
     
     
