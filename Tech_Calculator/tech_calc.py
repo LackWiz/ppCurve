@@ -1,10 +1,6 @@
-import os
-import json
 import math
 import sys
 sys.path.insert(0, 'Tech_Calculator')
-import _BackendFiles.MapDownloader as MapDownloader
-import _BackendFiles.setup as setup
 from packaging.version import parse
 import numpy as np
 from scipy.special import comb
