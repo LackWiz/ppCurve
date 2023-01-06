@@ -310,24 +310,6 @@ def swingCurveCalc(swingData: list, leftOrRight, isuser=True):
         curveComplexity = len(speedList) * average(speedList[int(len(speedList) * lookback):]) / 20
         pathAngleStrain = bezierAngleStrainCalc(angleList[int(len(angleList) * lookback):], swingData[i]['forehand'], leftOrRight) / len(angleList) * 2
 
-        # print(f"curveComplexity {curveComplexity}")
-        # print(f"pathAngleStrain {pathAngleStrain}")
-        # from matplotlib import pyplot as plt        #   Test
-        # fig, ax = plt.subplots(figsize = (8, 5))
-        # ax.plot(xvals, yvals, label='curve path')
-        # xpoints = [p[0] for p in points]
-        # ypoints = [p[1] for p in points]
-        # ax.plot(xvals, yvals, label='curve path')
-        # ax.plot(xpoints, ypoints, "ro")
-        # ax.set_xticks(np.linspace(0,1.333333333,5))
-        # ax.set_yticks(np.linspace(0,1,4))
-        # #plt.xlim(0,1.3333333)
-        # #plt.ylim(0,1)
-        # plt.legend()
-        # plt.show()
-
-
-
         testData.append({'curveComplexityStrain': curveComplexity, 'pathAngleStrain': pathAngleStrain})
         swingData[i]['pathStrain'] = curveComplexity + pathAngleStrain
     if leftOrRight:
