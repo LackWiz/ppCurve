@@ -461,7 +461,7 @@ def diffToPass(swingData, bpm, hand, isuser=True):
     if isuser:
         peakSS = [temp['swingSpeed'] for temp in data]
         peakSS.sort(reverse=True)
-        print(f"peak {hand} hand speed {average(peakSS[:int(len(peakSS) / 16)])}")
+        print(f"top 6.25% {hand} hand speed {average(peakSS[:int(len(peakSS) / 16)])}")
         print(f"average {hand} hand stress {average([temp['stress'] for temp in data])}")
 
     
