@@ -204,68 +204,42 @@ def mod(x, m):
 
 
 # Try to find if placement match for slider
-def isSlider(prev, next, direction, dot, pattern):
+def isSlider(x1, y1, x2, y2, direction, dot):
     if dot is True:
-        if prev['x'] == next['x'] and prev['y'] == next['y']:
+        if x1 == x2 and y1 == y2:
             return True
-    if pattern is False:
-        if 67.5 < direction <= 112.5:
-            if prev['y'] < next['y'] and prev['x'] == next['x']:
-                return True
-        elif 247.5 < direction <= 292.5:
-            if prev['y'] > next['y'] and prev['x'] == next['x']:
-                return True
-        elif 157.5 < direction <= 202.5:
-            if prev['x'] > next['x'] and prev['y'] == next['y']:
-                return True
-        elif 0 <= direction <= 22.5 or 337.5 < direction < 360:
-            if prev['x'] < next['x'] and prev['y'] == next['y']:
-                return True
-        elif 112.5 < direction <= 157.5:
-            if prev['y'] < next['y'] and prev['x'] > next['x']:
-                return True
-        elif 22.5 < direction <= 67.5:
-            if prev['y'] < next['y'] and prev['x'] < next['x']:
-                return True
-        elif 202.5 < direction <= 247.5:
-            if prev['y'] > next['y'] and prev['x'] > next['x']:
-                return True
-        elif 292.5 < direction <= 337.5:
-            if prev['y'] > next['y'] and prev['x'] < next['x']:
-                return True
-    else:
-        if 67.5 < direction <= 112.5:
-            if prev['y'] < next['y']:
-                return True
-        elif 247.5 < direction <= 292.5:
-            if prev['y'] > next['y']:
-                return True
-        elif 157.5 < direction <= 202.5:
-            if prev['x'] > next['x']:
-                return True
-        elif 0 <= direction <= 22.5 or 337.5 < direction < 360:
-            if prev['x'] < next['x']:
-                return True
-        elif 112.5 < direction <= 157.5:
-            if prev['y'] < next['y']:
-                return True
-            if prev['x'] > next['x']:
-                return True
-        elif 22.5 < direction <= 67.5:
-            if prev['y'] < next['y']:
-                return True
-            if prev['x'] < next['x']:
-                return True
-        elif 202.5 < direction <= 247.5:
-            if prev['y'] > next['y']:
-                return True
-            if prev['x'] > next['x']:
-                return True
-        elif 292.5 < direction <= 337.5:
-            if prev['y'] > next['y']:
-                return True
-            if prev['x'] < next['x']:
-                return True
+    if 67.5 < direction <= 112.5:
+        if y1 < y2:
+            return True
+    elif 247.5 < direction <= 292.5:
+        if y1 > y2:
+            return True
+    elif 157.5 < direction <= 202.5:
+        if x1 > x2:
+            return True
+    elif 0 <= direction <= 22.5 or 337.5 < direction < 360:
+        if x1 < x2:
+            return True
+    elif 112.5 < direction <= 157.5:
+        if y1 < y2:
+            return True
+        if x1 > x2:
+            return True
+    elif 22.5 < direction <= 67.5:
+        if y1 < y2:
+            return True
+        if x1 < x2:
+            return True
+    elif 202.5 < direction <= 247.5:
+        if y1 > y2:
+            return True
+        if x1 > x2:
+            return True
+    elif 292.5 < direction <= 337.5:
+        if y1 > y2:
+            return True
+        if x1 < x2:
+            return True
     return False
 
 
@@ -282,7 +256,10 @@ def findAngleViaPosition(mapSplitData: list, i, h, guideAngle, pattern):
         currentAngle = reverseCutDirection(currentAngle)
     if isSameDirection(currentAngle, guideAngle) is True and pattern is False:
         currentAngle = reverseCutDirection(currentAngle)
-    return currentAngle
+
+    simulatedPos = simulateSwingPos(mapSplitData[i]['x'], mapSplitData[i]['y'], currentAngle)
+
+    return currentAngle, simulatedPos
 
 
 def simulateSwingPos(x, y, direction):
@@ -335,6 +312,7 @@ def flowDetector(mapSplitData: list, leftOrRight):
         testValue = 45
     mapSplitData = sorted(mapSplitData, key=lambda d: d['b'])
     handlePattern(mapSplitData)
+    lastSimPos = (0, 0)
     # Fill the list preemptively
     for i in range(0, len(mapSplitData)):
         mapSplitData[i]['pattern'] = False
@@ -362,20 +340,23 @@ def flowDetector(mapSplitData: list, leftOrRight):
     if mapSplitData[1]['d'] == 8:
         # Pattern?
         if (mapSplitData[1]['b'] - mapSplitData[0]['b'] <= 0.25
-            and isSlider(mapSplitData[0], mapSplitData[1], mapSplitData[0]['dir'], True, False)) \
-                or mapSplitData[1]['b'] - mapSplitData[0]['b'] <= 0.1429:
-            mapSplitData[1]['dir'] = findAngleViaPosition(mapSplitData, 1, 0, mapSplitData[0]['dir'], True)
+            and isSlider(mapSplitData[0]['x'], mapSplitData[0]['y'], mapSplitData[1]['x'], mapSplitData[1]['y'],
+                         mapSplitData[0]['dir'], True)) or mapSplitData[1]['b'] - mapSplitData[0]['b'] <= 0.1429:
+            (mapSplitData[1]['dir'], lastSimPos) = findAngleViaPosition(mapSplitData, 1, 0, mapSplitData[0]['dir'],
+                                                                        True)
             if mapSplitData[0]['d'] == 8:
                 mapSplitData[0]['dir'] = mapSplitData[1]['dir']
             mapSplitData[1]['pattern'] = True
             mapSplitData[0]['pattern'] = True
             mapSplitData[0]['head'] = True
         else:
-            mapSplitData[1]['dir'] = findAngleViaPosition(mapSplitData, 1, 0, mapSplitData[0]['dir'], False)
+            (mapSplitData[1]['dir'], lastSimPos) = findAngleViaPosition(mapSplitData, 1, 0, mapSplitData[0]['dir'],
+                                                                        False)
     else:
         mapSplitData[1]['dir'] = mod(cut_direction_index[mapSplitData[1]['d']] + mapSplitData[1]['a'], 360)
         if ((mapSplitData[1]['b'] - mapSplitData[0]['b'] <= 0.25
-             and isSlider(mapSplitData[0], mapSplitData[1], mapSplitData[0]['dir'], False, False)) \
+             and isSlider(mapSplitData[0]['x'], mapSplitData[0]['y'], mapSplitData[1]['x'], mapSplitData[1]['y'],
+                         mapSplitData[0]['dir'], False))
                 or mapSplitData[1]['b'] - mapSplitData[0]['b'] <= 0.1429):
             mapSplitData[0]['head'] = True
             mapSplitData[0]['pattern'] = True
@@ -384,21 +365,29 @@ def flowDetector(mapSplitData: list, leftOrRight):
     for i in range(2, len(mapSplitData) - 1):
         if mapSplitData[i]['d'] == 8:  # Dot note
             # If under 0.25 and placement matches, probably a pattern
-            if (mapSplitData[i]['b'] - mapSplitData[i - 1]['b'] <= 0.25
-                and isSlider(mapSplitData[i - 1], mapSplitData[i], mapSplitData[i - 1]['dir'], True,
-                             mapSplitData[i - 1]['pattern'])) \
-                    or mapSplitData[i]['b'] - mapSplitData[i - 1]['b'] <= 0.1429:
-                mapSplitData[i]['dir'] = findAngleViaPosition(mapSplitData, i, i - 1, mapSplitData[i - 1]['dir'], True)
-                if mapSplitData[i - 1]['d'] == 8:
-                    mapSplitData[i - 1]['dir'] = mapSplitData[i]['dir']
-                mapSplitData[i]['pattern'] = True
-                # Mark the head of the pattern
-                if mapSplitData[i - 1]['pattern'] is False:
-                    mapSplitData[i - 1]['head'] = True
-                    mapSplitData[i - 1]['pattern'] = True
-                continue
+            if mapSplitData[i]['b'] - mapSplitData[i - 1]['b'] <= 0.25:
+                if ((mapSplitData[i - 1]['d'] != 8 and
+                        isSlider(mapSplitData[i - 1]['x'], mapSplitData[i - 1]['y'], mapSplitData[i]['x'],
+                                 mapSplitData[i]['y'], mapSplitData[i - 1]['dir'], False))
+                        or (mapSplitData[i - 1]['d'] == 8 and isSlider(lastSimPos[0], lastSimPos[1],
+                                    mapSplitData[i]['x'], mapSplitData[i]['y'], mapSplitData[i - 1]['dir'], True))
+                        or (mapSplitData[i]['b'] - mapSplitData[i - 1]['b'] <= 0.1429)):
+                    (mapSplitData[i]['dir'], lastSimPos) = findAngleViaPosition(mapSplitData, i, i - 1,
+                                                                                mapSplitData[i - 1]['dir'], True)
+                    if mapSplitData[i - 1]['d'] == 8:
+                        mapSplitData[i - 1]['dir'] = mapSplitData[i]['dir']
+                    mapSplitData[i]['pattern'] = True
+                    # Mark the head of the pattern
+                    if mapSplitData[i - 1]['pattern'] is False:
+                        mapSplitData[i - 1]['head'] = True
+                        mapSplitData[i - 1]['pattern'] = True
+                    continue
+                else:
+                    (mapSplitData[i]['dir'], lastSimPos) = findAngleViaPosition(mapSplitData, i, i - 1,
+                                                                                mapSplitData[i - 1]['dir'], False)
             else:
-                mapSplitData[i]['dir'] = findAngleViaPosition(mapSplitData, i, i - 1, mapSplitData[i - 1]['dir'], False)
+                (mapSplitData[i]['dir'], lastSimPos) = findAngleViaPosition(mapSplitData, i, i - 1,
+                                                                            mapSplitData[i - 1]['dir'], False)
             # Check if the direction found work, otherwise check with the testValue
             if isSameDirection(mapSplitData[i - 1]['dir'], mapSplitData[i]['dir']) is False:
                 if mapSplitData[i + 1]['d'] != 8:
@@ -435,16 +424,19 @@ def flowDetector(mapSplitData: list, leftOrRight):
                     mapSplitData[i]['dir'] = mod(mapSplitData[i] - testValue * 2, 360)
         else:  # Arrow note
             mapSplitData[i]['dir'] = mod(cut_direction_index[mapSplitData[i]['d']] + mapSplitData[i]['a'], 360)
-            if ((mapSplitData[i]['b'] - mapSplitData[i - 1]['b'] <= 0.25
-                 and isSlider(mapSplitData[i - 1], mapSplitData[i], mapSplitData[i - 1]['dir'], False, mapSplitData[i - 1]['pattern']))
-                    or mapSplitData[i]['b'] - mapSplitData[i - 1]['b'] <= 0.1429):
-                mapSplitData[i]['pattern'] = True
-                if mapSplitData[i - 1]['pattern'] is False:
-                    mapSplitData[i - 1]['pattern'] = True
-                    mapSplitData[i - 1]['head'] = True
+            if mapSplitData[i]['b'] - mapSplitData[i - 1]['b'] <= 0.25:
+                if ((mapSplitData[i - 1]['d'] == 8 and isSlider(lastSimPos[0], lastSimPos[1],
+                              mapSplitData[i]['x'], mapSplitData[i]['y'], mapSplitData[i - 1]['dir'], False))
+                        or (mapSplitData[i - 1]['d'] != 8 and isSlider(mapSplitData[i - 1]['x'], mapSplitData[i - 1]['y'],
+                              mapSplitData[i]['x'], mapSplitData[i]['y'], mapSplitData[i - 1]['dir'], False))
+                        or (mapSplitData[i]['b'] - mapSplitData[i - 1]['b'] <= 0.1429)):
+                    mapSplitData[i]['pattern'] = True
+                    if mapSplitData[i - 1]['pattern'] is False:
+                        mapSplitData[i - 1]['pattern'] = True
+                        mapSplitData[i - 1]['head'] = True
     for i in range(2, len(mapSplitData) - 2):
         # Not a pattern and the note parity only work from before or after
-        if mapSplitData[i]['d'] == 8 and mapSplitData[i]['b'] - mapSplitData[i - 1]['b'] >= 0.125:
+        if mapSplitData[i]['d'] == 8 and mapSplitData[i]['pattern'] is False:
             if (isSameDirection(mapSplitData[i]['dir'], mapSplitData[i - 1]['dir']) is True
                 and isSameDirection(mapSplitData[i]['dir'], mapSplitData[i + 1]['dir']) is False) or \
                     ((isSameDirection(mapSplitData[i]['dir'], mapSplitData[i - 1]['dir']) is False and
@@ -460,10 +452,12 @@ def flowDetector(mapSplitData: list, leftOrRight):
     if mapSplitData[-1]['d'] == 8:
         # Pattern?
         if (mapSplitData[-1]['b'] - mapSplitData[-2]['b'] <= 0.25
-            and isSlider(mapSplitData[-2], mapSplitData[-1], mapSplitData[-2]['dir'], True, mapSplitData[-2]['pattern'])) \
-                or mapSplitData[-1]['b'] - mapSplitData[-2]['b'] <= 0.1429:
-            mapSplitData[-1]['dir'] = findAngleViaPosition(mapSplitData, len(mapSplitData) - 1,
-                                                           len(mapSplitData) - 2, mapSplitData[-2]['dir'], True)
+                and isSlider(mapSplitData[-2]['x'], mapSplitData[-2]['y'], mapSplitData[-1]['x'], mapSplitData[-1]['y'],
+                             mapSplitData[-2]['dir'], True)
+                or mapSplitData[-1]['b'] - mapSplitData[-2]['b'] <= 0.1429):
+            (mapSplitData[-1]['dir'], lastSimPos) = findAngleViaPosition(mapSplitData, len(mapSplitData) - 1,
+                                                                         len(mapSplitData) - 2, mapSplitData[-2]['dir'],
+                                                                         True)
             if mapSplitData[-2]['d'] == 8:
                 mapSplitData[-2]['dir'] = mapSplitData[-1]['dir']
             mapSplitData[-1]['pattern'] = True
@@ -472,12 +466,14 @@ def flowDetector(mapSplitData: list, leftOrRight):
                 mapSplitData[-2]['head'] = True
                 mapSplitData[-2]['pattern'] = True
         else:
-            mapSplitData[-1]['dir'] = findAngleViaPosition(mapSplitData, len(mapSplitData) - 1,
-                                                           len(mapSplitData) - 2, mapSplitData[-2]['dir'], False)
+            (mapSplitData[-1]['dir'], lastSimPos) = findAngleViaPosition(mapSplitData, len(mapSplitData) - 1,
+                                                                         len(mapSplitData) - 2, mapSplitData[-2]['dir'],
+                                                                         False)
     else:
         mapSplitData[-1]['dir'] = mod(cut_direction_index[mapSplitData[-1]['d']] + mapSplitData[-1]['a'], 360)
         if ((mapSplitData[-1]['b'] - mapSplitData[-2]['b'] <= 0.25
-             and isSlider(mapSplitData[-2], mapSplitData[-1], mapSplitData[-2]['dir'], False, mapSplitData[-2]['pattern'])) \
+             and isSlider(mapSplitData[-2]['x'], mapSplitData[-2]['y'], mapSplitData[-1]['x'], mapSplitData[-1]['y'],
+                          mapSplitData[-2]['dir'], False))
                 or mapSplitData[-1]['b'] - mapSplitData[-2]['b'] <= 0.1429):
             mapSplitData[-1]['pattern'] = True
             if mapSplitData[-2]['pattern'] is False:
@@ -489,6 +485,7 @@ def flowDetector(mapSplitData: list, leftOrRight):
 # Convert notes and patterns into swing data
 def processSwing(mapSplitData: list):
     swingData = []
+    lastSimPos = (0, 0)
     if len(mapSplitData) < 2:
         return swingData
     # First note
@@ -513,7 +510,7 @@ def processSwing(mapSplitData: list):
             # Find possible angle based on head placement
             for f in range(i, 0, -1):
                 if mapSplitData[f]['head'] is True:
-                    cBlockA = findAngleViaPosition(mapSplitData, i, f, pBlockA, True)
+                    (cBlockA, lastSimPos) = findAngleViaPosition(mapSplitData, i, f, pBlockA, True)
                     break
             if isSameDirection(cBlockA, pBlockA) is False:  # Fix angle is necessary
                 cBlockA = reverseCutDirection(cBlockA)
