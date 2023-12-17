@@ -14,16 +14,16 @@ xPair = []
 y1Pair = []
 y2Pair = []
 print("1 for Player PP vs Difficulty (pass star), 2 for Player PP vs 95% Star (overall star), 3 for Player ACC vs Acc star rating, 4 for custom (keys may be cAsE sEnSaTiVe)")
-xKey = input()
-if xKey == '1':
+selection = input()
+if selection == '1':
     xKey = 'Pass Rating'
     y1Key = 'playerPP'
     y2Key = 'null'
-elif xKey == '2':
+elif selection == '2':
     xKey = '95% Star'
     y1Key = 'playerPP'
     y2Key = 'null'
-elif xKey == '3':
+elif selection == '3':
     xKey = 'Acc Rating'
     y1Key = 'acc'
     y2Key = 'null'
@@ -66,8 +66,23 @@ ax.plot(xPair, y1Pair, 'o', label = y1Key)
 if y2Key.lower() != 'null':
     ax.plot(xPair, y2Pair, 'o', label = y2Key)
 
-plt.xlim(0,20)
-plt.ylim(0,1000)
+if selection in ['1', '2']:
+    plt.xlim(0,20)
+    plt.ylim(0,1000)
+elif selection == '3':
+    plt.xlim(0,20)
+    plt.ylim(0.8,1)
+else:
+    print(f'{xKey} limit should be from x1 to x2')
+    x1 = input('x1:')
+    x2 = input('x2:')
+    plt.xlim(x1, x2)
+    print(f'{y1Key} limit should be from y1 to y2')
+    y1 = input('y1:')
+    y2 = input('y2:')
+    plt.ylim(y1, y2)
+
+
 plt.grid(visible=True,which='major',axis='both')
 
 ax.legend(fontsize=10, fancybox=False, edgecolor='black', bbox_to_anchor=(1.1,1))

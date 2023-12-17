@@ -308,6 +308,14 @@ def newPlayerStats(userID, scoreCount, retest=False, versionNum=-1):
     excelFileName = os.path.join(f"{filePath}/export.csv")
     try:
         x = open(excelFileName, 'w', newline="", encoding='utf8')
+    except:
+        print(f'File write failed. Close any applications using {excelFileName} then press Enter')
+        input()
+        try:
+            x = open(excelFileName, 'w', newline="", encoding='utf8')
+        except:
+            print('Failed again. Exiting....')
+            input()
     finally:
         dict_writer = csv.DictWriter(x, newStats[0].keys())
         dict_writer.writeheader()
@@ -347,7 +355,7 @@ if __name__ == "__main__":
         versionNum = -1
 
     for i in range(0, len(playerTestList)):
-        newPlayerStats(playerTestList[i], 1000, retest, versionNum)
+        newPlayerStats(playerTestList[i], 10000, retest, versionNum)
         print(f"Finished {playerTestList[i]}")
     print("done")
     print("Press Enter to Exit")
