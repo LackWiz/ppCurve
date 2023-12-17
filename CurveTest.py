@@ -139,7 +139,6 @@ def inflate(pp):
 def load_Song_Stats(dataJSON, speed, key, retest=False, versionNum=-1):
     s = requests.Session()
     diffNum = dataJSON['leaderboard']['difficulty']['value']
-    diffIndex = searchDiffIndex(diffNum, dataJSON['leaderboard']['song']['difficulties'])
     hash = dataJSON['leaderboard']['song']['hash'].upper()
     AiJSON = {}
     try:
@@ -177,14 +176,9 @@ def load_Song_Stats(dataJSON, speed, key, retest=False, versionNum=-1):
     except:
         print("Requesting from AI and Calculator")
         result = s.get(
-            f"https://bs-replays-ai.azurewebsites.net/bl-reweight/{hash}/Standard/{diffNum}")
+            f"https://stage.api.beatleader.net/ppai2/{hash}/Standard/{diffNum}")
         if result.text == 'Not found':
-            newStar = dataJSON['leaderboard']['song']['difficulties'][diffIndex]['stars']
-            AiJSON['AIstats'] = {}
-            AiJSON['AIstats']['balanced'] = 0
-            AiJSON['AIstats']['expected_acc'] = 0
-            AiJSON['AIstats']['passing_difficulty'] = 0
-            # AiJSON['expected_acc'] = 1
+            AiJSON['AIstats'] = {'accrating': 0, 'predicted_acc': 0}
         else:
             AiJSON['AIstats'] = json.loads(result.text)
         infoData = setup.loadInfoData(key, False)
@@ -219,10 +213,8 @@ def newPlayerStats(userID, scoreCount, retest=False, versionNum=-1):
         print("Will recalulate and update tech data")
     for i in range(0, len(playerJSON['data'])):
         if playerJSON['data'][i]['pp'] != 0:
-            diffNum = playerJSON['data'][i]['leaderboard']['difficulty']['value']
-            diffIndex = searchDiffIndex(diffNum, playerJSON['data'][i]['leaderboard']['song']['difficulties'])
             key = getKey(playerJSON['data'][i])
-            if playerJSON['data'][i]['leaderboard']['song']['difficulties'][diffIndex]['status'] == 3:
+            if playerJSON['data'][i]['leaderboard']['difficulty']['status'] == 3:              # Checks if the difficulty is ranked. discords qualified maps
                 if playerJSON['data'][i]['leaderboard']['difficulty']['modeName'] == 'Standard':
                     speed = convertSpeed(playerJSON['data'][i]['modifiers'].split(','))
                     songStats = load_Song_Stats(playerJSON['data'][i], speed, key, retest, versionNum)
@@ -235,7 +227,7 @@ def newPlayerStats(userID, scoreCount, retest=False, versionNum=-1):
                         modifier = "SS"
                     else:
                         modifier = "none"
-                    AIacc = songStats['AIstats'][modifier]['AIacc']
+                    AIacc = songStats['AIstats'][modifier]['predicted_acc']
                     playerACC = playerJSON['data'][i]['accuracy']
                     passRating = songStats['lackStats']['balanced_pass_diff']
                     tech = songStats['lackStats']['balanced_tech']
@@ -257,15 +249,12 @@ def newPlayerStats(userID, scoreCount, retest=False, versionNum=-1):
 
                     newStats.append({})
                     newStats[-1]['name'] = playerJSON['data'][i]['leaderboard']['song']['name']
-                    newStats[-1]['diff'] = playerJSON['data'][i]['leaderboard']['song']['difficulties'][diffIndex][
-                        'difficultyName']
+                    newStats[-1]['diff'] = playerJSON['data'][i]['leaderboard']['difficulty']['difficultyName']
                     newStats[-1]['Pass'] = passRating
                     newStats[-1]['Acc'] = AI600Star
                     newStats[-1]['Tech'] = tech
                     newStats[-1]['Modifiers'] = playerJSON['data'][i]['modifiers']
                     newStats[-1]['acc'] = playerACC
-                    newStats[-1]['oldStar'] = playerJSON['data'][i]['leaderboard']['song']['difficulties'][diffIndex][
-                        'stars']
                     newStats[-1]['oldPP'] = playerJSON['data'][i]['pp']
                     newStats[-1]['passPP'] = passPP
                     newStats[-1]['techPP'] = playerTechPP
@@ -335,7 +324,7 @@ if __name__ == "__main__":
         versionNum = -1
 
     for i in range(0, len(playerTestList)):
-        newPlayerStats(playerTestList[i], 1000, retest, versionNum)
+        newPlayerStats(playerTestList[i], 100, retest, versionNum)
         print(f"Finished {playerTestList[i]}")
     print("done")
     print("Press Enter to Exit")

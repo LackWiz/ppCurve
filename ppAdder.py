@@ -18,7 +18,7 @@ newPPTotal = 0
 
 for i, score in enumerate(newPPJSON):
     try:
-        newPPTotal += newPPJSON[i]['playerPP'] * (0.96 ** i)
+        newPPTotal += newPPJSON[i]['playerPP'] * (0.965 ** i)
     except:
         print("New PP done")
 for i, score in enumerate(oldPPJSON):

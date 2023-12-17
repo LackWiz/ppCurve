@@ -69,7 +69,66 @@ def V2_to_V3(V2mapData: dict):    # Convert V2 JSON to V3
         newMapData['obstacles'][-1]['w'] = V2mapData['_obstacles'][i]['_width']
     return newMapData
 
+def V3_3_0_to_V3(V3_0_0mapData: dict):
+    newMapData = copy.deepcopy(V3_0_0mapData)
+    for i in range(0, len(newMapData['bpmEvents'])):
+        newMapData['bpmEvents'][i]['b'] = newMapData['bpmEvents'][i].get('b', 0)
+        newMapData['bpmEvents'][i]['m'] = newMapData['bpmEvents'][i].get('m', 0)
 
+    # for i in range(0, len(newMapData['rotationEvents'])): Used for lighting
+    #     newMapData['rotationEvents'][i]['b'] = newMapData['rotationEvents'][i].get('b', 0)
+    #     newMapData['rotationEvents'][i]['e'] = newMapData['rotationEvents'][i].get('e', 0)
+    #     newMapData['rotationEvents'][i]['r'] = newMapData['rotationEvents'][i].get('r', 0)
+
+    for i in range(0, len(newMapData['colorNotes'])):
+        newMapData['colorNotes'][i]['b'] = newMapData['colorNotes'][i].get('b', 0)
+        newMapData['colorNotes'][i]['x'] = newMapData['colorNotes'][i].get('x', 0)
+        newMapData['colorNotes'][i]['y'] = newMapData['colorNotes'][i].get('y', 0)
+        newMapData['colorNotes'][i]['a'] = newMapData['colorNotes'][i].get('a', 0)
+        newMapData['colorNotes'][i]['c'] = newMapData['colorNotes'][i].get('c', 0)
+        newMapData['colorNotes'][i]['d'] = newMapData['colorNotes'][i].get('d', 0)
+    
+    for i in range(0, len(newMapData['bombNotes'])):
+        newMapData['bombNotes'][i]['b'] = newMapData['bombNotes'][i].get('b', 0)
+        newMapData['bombNotes'][i]['x'] = newMapData['bombNotes'][i].get('x', 0)
+        newMapData['bombNotes'][i]['y'] = newMapData['bombNotes'][i].get('y', 0)
+    
+    for i in range(0, len(newMapData['obstacles'])):
+        newMapData['obstacles'][i]['b'] = newMapData['obstacles'][i].get('b', 0)
+        newMapData['obstacles'][i]['x'] = newMapData['obstacles'][i].get('x', 0)
+        newMapData['obstacles'][i]['y'] = newMapData['obstacles'][i].get('y', 0)
+        newMapData['obstacles'][i]['d'] = newMapData['obstacles'][i].get('d', 0)
+        newMapData['obstacles'][i]['w'] = newMapData['obstacles'][i].get('w', 0)
+        newMapData['obstacles'][i]['h'] = newMapData['obstacles'][i].get('h', 0)
+
+    # for i in range(0, len(newMapData['sliders'])):    Arcs not implemented in the also, so just leave it out.
+    #     newMapData['sliders'][i]['b'] = newMapData['sliders'][i].get('b', 0)
+    #     newMapData['sliders'][i]['c'] = newMapData['sliders'][i].get('c', 0)
+    #     newMapData['sliders'][i]['x'] = newMapData['sliders'][i].get('x', 0)
+    #     newMapData['sliders'][i]['y'] = newMapData['sliders'][i].get('y', 0)
+    #     newMapData['sliders'][i]['d'] = newMapData['sliders'][i].get('d', 0)
+    #     newMapData['sliders'][i]['mu'] = newMapData['sliders'][i].get('mu', 0)
+    #     newMapData['sliders'][i]['tb'] = newMapData['sliders'][i].get('tb', 0)
+    #     newMapData['sliders'][i]['tx'] = newMapData['sliders'][i].get('tx', 0)
+    #     newMapData['sliders'][i]['ty'] = newMapData['sliders'][i].get('ty', 0)
+    #     newMapData['sliders'][i]['tc'] = newMapData['sliders'][i].get('tc', 0)
+    #     newMapData['sliders'][i]['tmu'] = newMapData['sliders'][i].get('tmu', 0)
+    #     newMapData['sliders'][i]['m'] = newMapData['sliders'][i].get('m', 0)
+
+    for i in range(0, len(newMapData['burstSliders'])):
+        newMapData['burstSliders'][i]['b'] = newMapData['burstSliders'][i].get('b', 0)
+        newMapData['burstSliders'][i]['c'] = newMapData['burstSliders'][i].get('c', 0)
+        newMapData['burstSliders'][i]['x'] = newMapData['burstSliders'][i].get('x', 0)
+        newMapData['burstSliders'][i]['y'] = newMapData['burstSliders'][i].get('y', 0)
+        newMapData['burstSliders'][i]['d'] = newMapData['burstSliders'][i].get('d', 0)
+        newMapData['burstSliders'][i]['tb'] = newMapData['burstSliders'][i].get('tb', 0)
+        newMapData['burstSliders'][i]['tx'] = newMapData['burstSliders'][i].get('tx', 0)
+        newMapData['burstSliders'][i]['ty'] = newMapData['burstSliders'][i].get('ty', 0)
+        newMapData['burstSliders'][i]['sc'] = newMapData['burstSliders'][i].get('sc', 8)
+        newMapData['burstSliders'][i]['s'] = newMapData['burstSliders'][i].get('s', 1)
+
+    return newMapData
+    
 def mapPrep(mapData):
     try:
         mapVersion = parse(mapData['version'])
@@ -89,8 +148,10 @@ def mapPrep(mapData):
                     exit()
     if mapVersion < parse('3.0.0'):  # Try to figure out if the map is the V2 or V3 format
         newMapData = V2_to_V3(mapData)  # Convert to V3
-    else:
+    elif mapVersion < parse('3.3.0'):
         newMapData = mapData
+    else:       # New 3.3.0 spec omits default values, so we need to fill them in
+        newMapData = V3_3_0_to_V3(mapData)
     return newMapData
 
 

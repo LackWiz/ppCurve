@@ -16,7 +16,7 @@ y2Pair = []
 print("1 for basic PP vs Star, 2 for advanced")
 xKey = input()
 if xKey == '1':
-    xKey = 'passRating'
+    xKey = 'Pass'
     y1Key = 'playerPP'
     y2Key = 'null'
 else:
