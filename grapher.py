@@ -24,7 +24,7 @@ else:
     xKey = input()
     print("y1Key to use")
     y1Key = input()
-    print("y2Key to use (type NULL or leave blank if only need one plot)")
+    print("y2Key to use (type NULL or leave blank if only n1eed one plot)")
     y2Key = input()
 if y2Key == '':
     y2Key = 'null'

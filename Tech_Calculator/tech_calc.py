@@ -301,11 +301,11 @@ def handlePattern(mapSplitData: list):
 def flowDetector(mapSplitData: list, leftOrRight):
     if len(mapSplitData) < 2:
         return mapSplitData
-    if leftOrRight:
+    if leftOrRight:         # 0 = Left, 1 = Right
         testValue = -45
     else:
         testValue = 45
-    mapSplitData = sorted(mapSplitData, key=lambda d: d['b'])
+    mapSplitData = sorted(mapSplitData, key=lambda d: d['b'])   # Make sure list of notes is in chronological order.
     handlePattern(mapSplitData)
     # Fill the list preemptively
     for i in range(0, len(mapSplitData)):
