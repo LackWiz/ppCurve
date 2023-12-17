@@ -42,7 +42,7 @@ def bezier_curve(points, nTimes=1000):
     return list(np.dot(xPoints, polynomial_array)), list(np.dot(yPoints, polynomial_array))
 
 
-def V2_to_V3(V2mapData: dict):    # Convert V2 JSON to V3
+def V2_to_V3(V2mapData: dict):  # Convert V2 JSON to V3
     newMapData = {'colorNotes':[], 'bombNotes':[], 'obstacles':[]}
     for i in range(0, len(V2mapData['_notes'])):
         if V2mapData['_notes'][i]['_type'] in [0, 1]:
@@ -52,11 +52,11 @@ def V2_to_V3(V2mapData: dict):    # Convert V2 JSON to V3
             newMapData['colorNotes'][-1]['a'] = 0
             newMapData['colorNotes'][-1]['c'] = V2mapData['_notes'][i]['_type']
             newMapData['colorNotes'][-1]['d'] = V2mapData['_notes'][i]['_cutDirection']
-        elif V2mapData['_notes'][i]['_type'] == 3:      # Bombs
+        elif V2mapData['_notes'][i]['_type'] == 3:  # Bombs
             newMapData['bombNotes'].append({'b': V2mapData['_notes'][i]['_time']})
             newMapData['bombNotes'][-1]['x'] = V2mapData['_notes'][i]['_lineIndex']
             newMapData['bombNotes'][-1]['y'] = V2mapData['_notes'][i]['_lineLayer']
-    for i in range (0, len(V2mapData['_obstacles'])):
+    for i in range(0, len(V2mapData['_obstacles'])):
         newMapData['obstacles'].append({'b': V2mapData['_obstacles'][i]['_time']})
         newMapData['obstacles'][-1]['x'] = V2mapData['_obstacles'][i]['_lineIndex']
         if V2mapData['_obstacles'][i]['_type']:  # V2 wall type defines crouch or full walls
@@ -68,6 +68,7 @@ def V2_to_V3(V2mapData: dict):    # Convert V2 JSON to V3
         newMapData['obstacles'][-1]['d'] = V2mapData['_obstacles'][i]['_duration']
         newMapData['obstacles'][-1]['w'] = V2mapData['_obstacles'][i]['_width']
     return newMapData
+
 
 def V3_3_0_to_V3(V3_0_0mapData: dict):
     newMapData = copy.deepcopy(V3_0_0mapData)
@@ -87,12 +88,12 @@ def V3_3_0_to_V3(V3_0_0mapData: dict):
         newMapData['colorNotes'][i]['a'] = newMapData['colorNotes'][i].get('a', 0)
         newMapData['colorNotes'][i]['c'] = newMapData['colorNotes'][i].get('c', 0)
         newMapData['colorNotes'][i]['d'] = newMapData['colorNotes'][i].get('d', 0)
-    
+
     for i in range(0, len(newMapData['bombNotes'])):
         newMapData['bombNotes'][i]['b'] = newMapData['bombNotes'][i].get('b', 0)
         newMapData['bombNotes'][i]['x'] = newMapData['bombNotes'][i].get('x', 0)
         newMapData['bombNotes'][i]['y'] = newMapData['bombNotes'][i].get('y', 0)
-    
+
     for i in range(0, len(newMapData['obstacles'])):
         newMapData['obstacles'][i]['b'] = newMapData['obstacles'][i].get('b', 0)
         newMapData['obstacles'][i]['x'] = newMapData['obstacles'][i].get('x', 0)
@@ -128,7 +129,8 @@ def V3_3_0_to_V3(V3_0_0mapData: dict):
         newMapData['burstSliders'][i]['s'] = newMapData['burstSliders'][i].get('s', 1)
 
     return newMapData
-    
+
+
 def mapPrep(mapData):
     try:
         mapVersion = parse(mapData['version'])
@@ -150,7 +152,7 @@ def mapPrep(mapData):
         newMapData = V2_to_V3(mapData)  # Convert to V3
     elif mapVersion < parse('3.3.0'):
         newMapData = mapData
-    else:       # New 3.3.0 spec omits default values, so we need to fill them in
+    else:  # New 3.3.0 spec omits default values, so we need to fill them in
         newMapData = V3_3_0_to_V3(mapData)
     return newMapData
 
@@ -202,41 +204,38 @@ def mod(x, m):
 
 
 # Try to find if placement match for slider
-def isSlider(prev, next, direction, dot):
-    if dot is True:
-        if prev['x'] == next['x'] and prev['y'] == next['y']:
-            return True
+def isSlider(x1, y1, x2, y2, direction):
     if 67.5 < direction <= 112.5:
-        if prev['y'] < next['y']:
+        if y1 < y2:
             return True
     elif 247.5 < direction <= 292.5:
-        if prev['y'] > next['y']:
+        if y1 > y2:
             return True
     elif 157.5 < direction <= 202.5:
-        if prev['x'] > next['x']:
+        if x1 > x2:
             return True
     elif 0 <= direction <= 22.5 or 337.5 < direction < 360:
-        if prev['x'] < next['x']:
+        if x1 < x2:
             return True
     elif 112.5 < direction <= 157.5:
-        if prev['y'] < next['y']:
+        if y1 < y2:
             return True
-        if prev['x'] > next['x']:
+        if x1 > x2:
             return True
     elif 22.5 < direction <= 67.5:
-        if prev['y'] < next['y']:
+        if y1 < y2:
             return True
-        if prev['x'] < next['x']:
+        if x1 < x2:
             return True
     elif 202.5 < direction <= 247.5:
-        if prev['y'] > next['y']:
+        if y1 > y2:
             return True
-        if prev['x'] > next['x']:
+        if x1 > x2:
             return True
     elif 292.5 < direction <= 337.5:
-        if prev['y'] > next['y']:
+        if y1 > y2:
             return True
-        if prev['x'] < next['x']:
+        if x1 < x2:
             return True
     return False
 
@@ -254,7 +253,10 @@ def findAngleViaPosition(mapSplitData: list, i, h, guideAngle, pattern):
         currentAngle = reverseCutDirection(currentAngle)
     if isSameDirection(currentAngle, guideAngle) is True and pattern is False:
         currentAngle = reverseCutDirection(currentAngle)
-    return currentAngle
+
+    simulatedPos = simulateSwingPos(mapSplitData[i]['x'], mapSplitData[i]['y'], currentAngle)
+
+    return currentAngle, simulatedPos
 
 
 def simulateSwingPos(x, y, direction):
@@ -296,24 +298,41 @@ def handlePattern(mapSplitData: list):
     return mapSplitData
 
 
+def sliderCondition(prev, nxt, sim, bpm, njs):
+    if prev['d'] == 8:
+        if nxt['b'] - prev['b'] <= 0.125:
+            if prev['x'] == nxt['x'] and prev['y'] == nxt['y'] and nxt['d'] == 8:  # Closer to 1/8 and inline
+                return True
+            if isSlider(sim[0], sim[1], nxt['x'], nxt['y'], prev['dir']):  # Position match for generic slider
+                return True
+        if (nxt['b'] - prev['b']) / (bpm / 60) * njs <= 1 and nxt['d'] == 8:  # Closer to 1m, assume it's a slider
+            return True
+        return False
+    if isSlider(prev['x'], prev['y'], nxt['x'], nxt['y'], prev['dir']):
+        return True
+    return False
+
+
 # Find angle in degree for each note
 # Proceed to fix some possible issue afterward
-def flowDetector(mapSplitData: list, leftOrRight):
+def flowDetector(mapSplitData: list, bpm: float, njs: float, leftOrRight):
     if len(mapSplitData) < 2:
         return mapSplitData
-    if leftOrRight:         # 0 = Left, 1 = Right
+    if leftOrRight:
         testValue = -45
     else:
         testValue = 45
-    mapSplitData = sorted(mapSplitData, key=lambda d: d['b'])   # Make sure list of notes is in chronological order.
+    mapSplitData = sorted(mapSplitData, key=lambda d: d['b'])
+    # Attempt to order the notes that are on same beat
     handlePattern(mapSplitData)
+    lastSimPos = (0, 0)
     # Fill the list preemptively
     for i in range(0, len(mapSplitData)):
         mapSplitData[i]['pattern'] = False
         mapSplitData[i]['head'] = False
     # Find the first note
     if mapSplitData[0]['d'] == 8:
-        if mapSplitData[1]['d'] != 8 and mapSplitData[1]['b'] - mapSplitData[0]['b'] <= 0.1429:
+        if mapSplitData[1]['d'] != 8 and mapSplitData[1]['b'] - mapSplitData[0]['b'] <= 0.125:
             mapSplitData[0]['dir'] = mod(cut_direction_index[mapSplitData[1]['d']] + mapSplitData[1]['a'], 360)
         else:
             # Use the first arrow found to reverse search the direction
@@ -322,7 +341,7 @@ def flowDetector(mapSplitData: list, leftOrRight):
                 found = tempList[0]
                 foundAngle = mod(cut_direction_index[found['d']] + found['a'], 360)
                 for i in range(mapSplitData.index(found), 0, -1):
-                    if mapSplitData[i]['b'] - mapSplitData[i - 1]['b'] >= 0.25:
+                    if mapSplitData[i]['b'] - mapSplitData[i - 1]['b'] > 0.125:
                         mapSplitData[0]['dir'] = reverseCutDirection(foundAngle)
             elif mapSplitData[0]['y'] >= 2:  # Otherwise, use position instead
                 mapSplitData[0]['dir'] = 90  # Assume up for top row
@@ -332,34 +351,36 @@ def flowDetector(mapSplitData: list, leftOrRight):
         mapSplitData[0]['dir'] = mod(cut_direction_index[mapSplitData[0]['d']] + mapSplitData[0]['a'], 360)
     # Find the second note
     if mapSplitData[1]['d'] == 8:
-        # Pattern?
-        if (mapSplitData[1]['b'] - mapSplitData[0]['b'] <= 0.25
-            and isSlider(mapSplitData[0], mapSplitData[1], mapSplitData[0]['dir'], True)) \
-                or mapSplitData[1]['b'] - mapSplitData[0]['b'] <= 0.1429:
-            mapSplitData[1]['dir'] = findAngleViaPosition(mapSplitData, 1, 0, mapSplitData[0]['dir'], True)
+        if (mapSplitData[1]['b'] - mapSplitData[0]['b'] <= 0.125  # Pattern?
+            and isSlider(mapSplitData[0]['x'], mapSplitData[0]['y'], mapSplitData[1]['x'], mapSplitData[1]['y'],
+                         mapSplitData[0]['dir'])) or mapSplitData[1]['b'] - mapSplitData[0]['b'] <= 0.0625:
+            (mapSplitData[1]['dir'], lastSimPos) = findAngleViaPosition(mapSplitData, 1, 0, mapSplitData[0]['dir'],
+                                                                        True)
             if mapSplitData[0]['d'] == 8:
                 mapSplitData[0]['dir'] = mapSplitData[1]['dir']
             mapSplitData[1]['pattern'] = True
             mapSplitData[0]['pattern'] = True
             mapSplitData[0]['head'] = True
         else:
-            mapSplitData[1]['dir'] = findAngleViaPosition(mapSplitData, 1, 0, mapSplitData[0]['dir'], False)
-    else:
+            (mapSplitData[1]['dir'], lastSimPos) = findAngleViaPosition(mapSplitData, 1, 0, mapSplitData[0]['dir'],
+                                                                        False)
+    else:  # Arrow
         mapSplitData[1]['dir'] = mod(cut_direction_index[mapSplitData[1]['d']] + mapSplitData[1]['a'], 360)
-        if ((mapSplitData[1]['b'] - mapSplitData[0]['b'] <= 0.25
-            and isSlider(mapSplitData[0], mapSplitData[1], mapSplitData[0]['dir'], False)) \
-                or mapSplitData[1]['b'] - mapSplitData[0]['b'] <= 0.1429):
+        if ((mapSplitData[1]['b'] - mapSplitData[0]['b'] <= 0.125
+             and isSlider(mapSplitData[0]['x'], mapSplitData[0]['y'], mapSplitData[1]['x'], mapSplitData[1]['y'],
+                          mapSplitData[0]['dir']))
+                or mapSplitData[1]['b'] - mapSplitData[0]['b'] <= 0.0625):
             mapSplitData[0]['head'] = True
             mapSplitData[0]['pattern'] = True
             mapSplitData[1]['pattern'] = True
     # Analyze the rest of the notes
     for i in range(2, len(mapSplitData) - 1):
         if mapSplitData[i]['d'] == 8:  # Dot note
-            # If under 0.25 and placement matches, probably a pattern
-            if (mapSplitData[i]['b'] - mapSplitData[i - 1]['b'] <= 0.25
-                and isSlider(mapSplitData[i - 1], mapSplitData[i], mapSplitData[i - 1]['dir'], True)) \
-                    or mapSplitData[i]['b'] - mapSplitData[i - 1]['b'] <= 0.1429:
-                mapSplitData[i]['dir'] = findAngleViaPosition(mapSplitData, i, i - 1, mapSplitData[i - 1]['dir'], True)
+            if ((sliderCondition(mapSplitData[i - 1], mapSplitData[i], lastSimPos, bpm, njs))
+                    or mapSplitData[i]['b'] - mapSplitData[i - 1]['b'] <= 0.0625):
+                # If it's a pattern, find the direction based on the last note position
+                (mapSplitData[i]['dir'], lastSimPos) = findAngleViaPosition(mapSplitData, i, i - 1,
+                                                                            mapSplitData[i - 1]['dir'], True)
                 if mapSplitData[i - 1]['d'] == 8:
                     mapSplitData[i - 1]['dir'] = mapSplitData[i]['dir']
                 mapSplitData[i]['pattern'] = True
@@ -369,7 +390,9 @@ def flowDetector(mapSplitData: list, leftOrRight):
                     mapSplitData[i - 1]['pattern'] = True
                 continue
             else:
-                mapSplitData[i]['dir'] = findAngleViaPosition(mapSplitData, i, i - 1, mapSplitData[i - 1]['dir'], False)
+                # Find the position by simulating a swing from previous note
+                (mapSplitData[i]['dir'], lastSimPos) = findAngleViaPosition(mapSplitData, i, i - 1,
+                                                                            mapSplitData[i - 1]['dir'], False)
             # Check if the direction found work, otherwise check with the testValue
             if isSameDirection(mapSplitData[i - 1]['dir'], mapSplitData[i]['dir']) is False:
                 if mapSplitData[i + 1]['d'] != 8:
@@ -391,7 +414,7 @@ def flowDetector(mapSplitData: list, leftOrRight):
             elif isSameDirection(mapSplitData[i - 1]['dir'], mapSplitData[i]['dir'] - testValue) is False:
                 mapSplitData[i]['dir'] = mod(mapSplitData[i]['dir'] - testValue, 360)
                 continue
-                # Maybe the note before (dot) is wrong? Attempt to fix here
+            # Maybe the previous note (dot) is wrong? Attempt to fix here
             if mapSplitData[i - 1]['d'] == 8 and isSameDirection(mapSplitData[i - 2]['dir'],
                                                                  mapSplitData[i - 1]['dir'] + testValue) is False:
                 lastDir = mod(mapSplitData[i - 1]['dir'] + testValue, 360)
@@ -406,16 +429,17 @@ def flowDetector(mapSplitData: list, leftOrRight):
                     mapSplitData[i]['dir'] = mod(mapSplitData[i] - testValue * 2, 360)
         else:  # Arrow note
             mapSplitData[i]['dir'] = mod(cut_direction_index[mapSplitData[i]['d']] + mapSplitData[i]['a'], 360)
-            if ((mapSplitData[i]['b'] - mapSplitData[i - 1]['b'] <= 0.25
-                and isSlider(mapSplitData[i - 1], mapSplitData[i], mapSplitData[i - 1]['dir'], False)) \
-                    or mapSplitData[i]['b'] - mapSplitData[i - 1]['b'] <= 0.1429):
+            if ((mapSplitData[i]['b'] - mapSplitData[i - 1]['b'] <= 0.125
+                 and sliderCondition(mapSplitData[i - 1], mapSplitData[i], lastSimPos, bpm, njs)
+                 and isSameDirection(mapSplitData[i - 1]['dir'], mapSplitData[i]['dir']))
+                    or mapSplitData[i]['b'] - mapSplitData[i - 1]['b'] <= 0.0625):
                 mapSplitData[i]['pattern'] = True
                 if mapSplitData[i - 1]['pattern'] is False:
                     mapSplitData[i - 1]['pattern'] = True
                     mapSplitData[i - 1]['head'] = True
     for i in range(2, len(mapSplitData) - 2):
         # Not a pattern and the note parity only work from before or after
-        if mapSplitData[i]['d'] == 8 and mapSplitData[i]['b'] - mapSplitData[i - 1]['b'] >= 0.125:
+        if mapSplitData[i]['d'] == 8 and mapSplitData[i]['pattern'] is False:
             if (isSameDirection(mapSplitData[i]['dir'], mapSplitData[i - 1]['dir']) is True
                 and isSameDirection(mapSplitData[i]['dir'], mapSplitData[i + 1]['dir']) is False) or \
                     ((isSameDirection(mapSplitData[i]['dir'], mapSplitData[i - 1]['dir']) is False and
@@ -430,11 +454,12 @@ def flowDetector(mapSplitData: list, leftOrRight):
     # Handle the last note
     if mapSplitData[-1]['d'] == 8:
         # Pattern?
-        if (mapSplitData[-1]['b'] - mapSplitData[-2]['b'] <= 0.25
-            and isSlider(mapSplitData[-2], mapSplitData[-1], mapSplitData[-2]['dir'], True)) \
-                or mapSplitData[-1]['b'] - mapSplitData[-2]['b'] <= 0.1429:
-            mapSplitData[-1]['dir'] = findAngleViaPosition(mapSplitData, len(mapSplitData) - 1,
-                                                           len(mapSplitData) - 2, mapSplitData[-2]['dir'], True)
+        if ((mapSplitData[-1]['b'] - mapSplitData[-2]['b'] <= 0.125 and
+             sliderCondition(mapSplitData[-2], mapSplitData[-1], lastSimPos, bpm, njs))
+                or mapSplitData[-1]['b'] - mapSplitData[-2]['b'] <= 0.0625):
+            (mapSplitData[-1]['dir'], lastSimPos) = findAngleViaPosition(mapSplitData, len(mapSplitData) - 1,
+                                                                         len(mapSplitData) - 2, mapSplitData[-2]['dir'],
+                                                                         True)
             if mapSplitData[-2]['d'] == 8:
                 mapSplitData[-2]['dir'] = mapSplitData[-1]['dir']
             mapSplitData[-1]['pattern'] = True
@@ -443,13 +468,14 @@ def flowDetector(mapSplitData: list, leftOrRight):
                 mapSplitData[-2]['head'] = True
                 mapSplitData[-2]['pattern'] = True
         else:
-            mapSplitData[-1]['dir'] = findAngleViaPosition(mapSplitData, len(mapSplitData) - 1,
-                                                           len(mapSplitData) - 2, mapSplitData[-2]['dir'], False)
+            (mapSplitData[-1]['dir'], lastSimPos) = findAngleViaPosition(mapSplitData, len(mapSplitData) - 1,
+                                                                         len(mapSplitData) - 2, mapSplitData[-2]['dir'],
+                                                                         False)
     else:
         mapSplitData[-1]['dir'] = mod(cut_direction_index[mapSplitData[-1]['d']] + mapSplitData[-1]['a'], 360)
-        if ((mapSplitData[-1]['b'] - mapSplitData[-2]['b'] <= 0.25
-            and isSlider(mapSplitData[-2], mapSplitData[-1], mapSplitData[-2]['dir'], False)) \
-                or mapSplitData[-1]['b'] - mapSplitData[-2]['b'] <= 0.1429):
+        if ((mapSplitData[-1]['b'] - mapSplitData[-2]['b'] <= 0.125
+             and sliderCondition(mapSplitData[-2], mapSplitData[-1], lastSimPos, bpm, njs))
+                or mapSplitData[-1]['b'] - mapSplitData[-2]['b'] <= 0.0625):
             mapSplitData[-1]['pattern'] = True
             if mapSplitData[-2]['pattern'] is False:
                 mapSplitData[-2]['head'] = True
@@ -466,9 +492,12 @@ def processSwing(mapSplitData: list):
     swingData.append({'time': mapSplitData[0]['b'], 'angle': mapSplitData[0]['dir']})
     swingData[-1]['entryPos'], swingData[-1]['exitPos'] = \
         calculateBaseEntryExit((mapSplitData[0]['x'], mapSplitData[0]['y']), mapSplitData[0]['dir'])
+    swingData[-1]['patternRating'] = 0
+
     for i in range(1, len(mapSplitData)):
         # Previous note
         pBlockA = swingData[-1]['angle']
+        pBlockP = [mapSplitData[i - 1]['x'], mapSplitData[i - 1]['y']]
         # Current note
         cBlockB = mapSplitData[i]['b']
         cBlockA = mapSplitData[i]['dir']
@@ -476,11 +505,12 @@ def processSwing(mapSplitData: list):
         if mapSplitData[i]['pattern'] is False or mapSplitData[i]['head'] is True:
             swingData.append({'time': cBlockB, 'angle': cBlockA})
             swingData[-1]['entryPos'], swingData[-1]['exitPos'] = calculateBaseEntryExit(cBlockP, cBlockA)
+            swingData[-1]['patternRating'] = 0
         elif mapSplitData[i]['pattern']:  # Modify the angle and entry or exit position, doesn't create a new swing data
             # Find possible angle based on head placement
             for f in range(i, 0, -1):
                 if mapSplitData[f]['head'] is True:
-                    cBlockA = findAngleViaPosition(mapSplitData, i, f, pBlockA, True)
+                    (cBlockA, lastSimPos) = findAngleViaPosition(mapSplitData, i, f, pBlockA, True)
                     break
             if isSameDirection(cBlockA, pBlockA) is False:  # Fix angle is necessary
                 cBlockA = reverseCutDirection(cBlockA)
@@ -499,6 +529,12 @@ def processSwing(mapSplitData: list):
                 swingData[-1]['exitPos'] = [
                     cBlockP[0] * 0.333333 + math.cos(math.radians(cBlockA)) * 0.166667 + 0.166667,
                     cBlockP[1] * 0.333333 + math.sin(math.radians(cBlockA)) * 0.166667 + 0.16667]
+            direction_angle = reverseCutDirection(mod(math.degrees(math.atan2(pBlockP[1] - cBlockP[1],
+                                                                              pBlockP[0] - cBlockP[0])), 360))
+            if not abs(direction_angle - cBlockA) <= 15:
+                swingData[-1]['patternRating'] += 3
+            else:
+                swingData[-1]['patternRating'] += 1
     return swingData
 
 
@@ -560,7 +596,7 @@ def patternSplitter(swingData: list):
     for i in range(0, len(swingData)):
         if i > 0:
             # Tries to find Patterns within margin
-            if (1 / (swingData[i]['time'] - swingData[i - 1]['time'])) - swingData[i]['frequency'] <= SFmargin:
+            if abs((1 / (swingData[i]['time'] - swingData[i - 1]['time'])) - swingData[i]['frequency']) <= SFmargin:
                 if not patternFound:  # Found a pattern and it's the first one?
                     patternFound = True
                     del tempPlist[-1]
@@ -668,7 +704,7 @@ def swingCurveCalc(swingData: list, leftOrRight, isuser=True):
                 simHandPrePos = simHandCurPos
             positionComplexity = math.sqrt(
                 (simHandCurPos[1] - simHandPrePos[1]) ** 2 + (simHandCurPos[0] - simHandPrePos[0]) ** 2) ** 2
-            # Distance cap
+            # Distance cap (ME/NE)
             if positionComplexity > 10:
                 positionComplexity = 10
         lengthOfList = len(angleChangeList) * 0.6
@@ -756,13 +792,38 @@ def diffToPass(swingData, WINDOW):
         return 0
 
 
+def isInLinearPath(prev, curr, next):
+    dxc = next['entryPos'][0] - prev['entryPos'][0]
+    dyc = next['entryPos'][1] - prev['entryPos'][1]
+    dxl = curr['entryPos'][0] - prev['entryPos'][0]
+    dyl = curr['entryPos'][1] - prev['entryPos'][1]
+    cross = dxc * dyl - dyc * dxl
+    if cross == 0:
+        return True
+    else:
+        return False
+
+
+def detectLinear(data: list):
+    if len(data) < 2:
+        return data
+    data[0]['linear'] = True
+    data[1]['linear'] = True
+    for i in range(2, len(data)):
+        if isInLinearPath(data[i - 2], data[i - 1], data[i]) is True:
+            data[i]['linear'] = True
+        else:
+            data[i]['linear'] = False
+    return data
+
+
 def combineAndSortList(array1, array2, key):
     combinedArray = array1 + array2
     combinedArray = sorted(combinedArray, key=lambda x: x[f'{key}'])  # once combined, sort by time
     return combinedArray
 
 
-def techOperations(mapData, bpm, isuser=True, verbose=True):
+def techOperations(mapData, bpm, njs, isuser=True, verbose=True):
     LeftMapData = splitMapData(mapData, 0)
     RightMapData = splitMapData(mapData, 1)
     BombData = splitMapData(mapData, 2)
@@ -773,62 +834,78 @@ def techOperations(mapData, bpm, isuser=True, verbose=True):
 
     # Analyze the map
     if LeftMapData is not None:
-        LeftMapData = flowDetector(LeftMapData, False)
+        LeftMapData = flowDetector(LeftMapData, bpm, njs, False)
         LeftSwingData = processSwing(LeftMapData)
         LeftPatternData = patternSplitter(LeftSwingData)
         LeftSwingData = parityPredictor(LeftPatternData, False)
         LeftSwingData, leftVerbose = swingCurveCalc(LeftSwingData, False, isuser)
+        LeftSwingData = detectLinear(LeftSwingData)
     if RightMapData is not None:
-        RightMapData = flowDetector(RightMapData, True)
+        RightMapData = flowDetector(RightMapData, bpm, njs, True)
         RightSwingData = processSwing(RightMapData)
         RightPatternData = patternSplitter(RightSwingData)
         RightSwingData = parityPredictor(RightPatternData, True)
         RightSwingData, rightVerbose = swingCurveCalc(RightSwingData, True, isuser)
+        RightSwingData = detectLinear(RightSwingData)
 
+    # Tech rating
     SwingData = combineAndSortList(LeftSwingData, RightSwingData, 'time')
     StrainList = [strain['angleStrain'] + strain['pathStrain'] for strain in SwingData]
     StrainList.sort()
     tech = average(StrainList[int(len(StrainList) * 0.25):])
+
+    # Pass rating
     calcSwingDiff(LeftSwingData, bpm, 'left', isuser)
-    passDiffLeftA = diffToPass(LeftSwingData, 8)
-    passDiffLeftB = diffToPass(LeftSwingData, 16)
-    passDiffLeftC = diffToPass(LeftSwingData, 32)
-    passDiffLeftD = diffToPass(LeftSwingData, 48)
-    passDiffLeftE = diffToPass(LeftSwingData, 96)
     calcSwingDiff(RightSwingData, bpm, 'right', isuser)
-    passDiffRightA = diffToPass(RightSwingData, 8)
-    passDiffRightB = diffToPass(RightSwingData, 16)
-    passDiffRightC = diffToPass(RightSwingData, 32)
-    passDiffRightD = diffToPass(RightSwingData, 48)
-    passDiffRightE = diffToPass(RightSwingData, 96)
-    passDiffLeft = (passDiffLeftA + passDiffLeftB + passDiffLeftC + passDiffLeftD + passDiffLeftE) / 5
-    passDiffRight = (passDiffRightA + passDiffRightB + passDiffRightC + passDiffRightD + passDiffRightE) / 5
-    balanced_pass = max(passDiffLeft, passDiffRight)
+    passDiffLeft = diffToPass(LeftSwingData, 8)
+    passDiffLeft += diffToPass(LeftSwingData, 16)
+    passDiffLeft += diffToPass(LeftSwingData, 32)
+    passDiffLeft += diffToPass(LeftSwingData, 48)
+    passDiffLeft += diffToPass(LeftSwingData, 96)
+    passDiffRight = diffToPass(RightSwingData, 8)
+    passDiffRight += diffToPass(RightSwingData, 16)
+    passDiffRight += diffToPass(RightSwingData, 32)
+    passDiffRight += diffToPass(RightSwingData, 48)
+    passDiffRight += diffToPass(RightSwingData, 96)
+    passDiffLeft /= 5
+    passDiffRight /= 5
+
+    # Final rating
+    balanced_pass = max(passDiffLeft, passDiffRight) * 0.8 + min(passDiffLeft, passDiffRight) * 0.2
     balanced_tech = tech * (-1.4 ** (-balanced_pass) + 1)
     low_note_nerf = 1 / (
             1 + math.e ** (-0.6 * (len(SwingData) / 100 + 1.5)))  # https://www.desmos.com/calculator/povnzsoytj
+    LinearList = [linear['linear'] for linear in SwingData if linear['linear'] is True]
+    linear = 1
+    if len(SwingData) != 0:
+        linear = len(LinearList) / len(SwingData)
+    avgPatternRating = average([swing['patternRating'] for swing in SwingData])
 
     if verbose:
         returnDict = {'left': leftVerbose, 'right': rightVerbose, 'tech': tech,
                       'balanced_tech': balanced_tech, 'balanced_pass_diff': balanced_pass,
-                      'low_note_nerf': low_note_nerf}
+                      'low_note_nerf': low_note_nerf, 'avg_pattern_rating': avgPatternRating,
+                      'linear_rating': linear}
     else:
         returnDict = {'balanced_tech': balanced_tech, 'balanced_pass_diff': balanced_pass,
-                      'low_note_nerf': low_note_nerf}
+                      'low_note_nerf': low_note_nerf, 'avg_pattern_rating': avgPatternRating,
+                      'linear_rating': linear}
     if isuser:
         print(f"Calculated Tech = {round(tech, 2)}")  # Put Breakpoint here if you want to see
         print(f"Calculated nerf = {round(low_note_nerf, 2)}")
         print(f"Calculated balanced tech = {round(balanced_tech, 2)}")
         print(f"Calculated balanced pass diff = {round(balanced_pass, 2)}")
+        print(f"Calculated average pattern rating = {round(avgPatternRating, 2)}")
+        print(f"Calculated linear = {round(linear, 2)}")
 
     return returnDict
 
 
-def mapCalculation(mapData, bpm, isuser=True, verbose=True):
+def mapCalculation(mapData, bpm, njs, isuser=True, verbose=True):
     t0 = time.time()
     newMapData = mapPrep(mapData)
     t1 = time.time()
-    data = techOperations(newMapData, bpm, isuser, verbose)
+    data = techOperations(newMapData, bpm, njs, isuser, verbose)
     if isuser:
         print(f'Execution Time = {t1 - t0}')
     return data
@@ -839,7 +916,6 @@ if __name__ == "__main__":
     mapKey = input()
     mapKey = mapKey.replace("!bsr ", "")
     infoData = setup.loadInfoData(mapKey)
-    bpm = infoData['_beatsPerMinute']
     availableDiffs = setup.findStandardDiffs(setup.findSongPath(mapKey))
     if len(availableDiffs) > 1:
         print(f'Choose Diff num: {availableDiffs}')
@@ -847,7 +923,16 @@ if __name__ == "__main__":
     else:
         diffNum = availableDiffs[0]
         print(f'autoloading {diffNum}')
-    mapData = setup.loadMapData(mapKey, diffNum)
-    mapCalculation(mapData, bpm, True, True)
+    print("input speed modifier: 0.85, 1, 1.2 or 1.5")
+    speed = float(input())
+    (mapData, charIndex) = setup.loadMapData(mapKey, diffNum, False)
+    bpm = infoData['_beatsPerMinute'] * speed
+    beatmapSets = infoData['_difficultyBeatmapSets'][charIndex]['_difficultyBeatmaps']
+    njs = 0
+    for i in range(0, len(beatmapSets)):
+        if beatmapSets[i]["_difficultyRank"] == diffNum:
+            njs = beatmapSets[i]['_noteJumpMovementSpeed'] * speed
+            break
+    mapCalculation(mapData, bpm, njs, True, True)
     print("Done")
     input()
