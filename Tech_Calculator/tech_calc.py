@@ -544,23 +544,26 @@ def bezierAngleStrainCalc(angleData: list, forehand, leftOrRight):
 
 # Split the long list of dictionaries into smaller lists of patterns containing lists of dictionaries
 def patternSplitter(swingData: list):
-    if len(swingData) < 2:
+    
+    if len(swingData) < 2:          # You need at least 3 notes before any kind of frequency calculation can be made
         return []
+    
     for i in range(0, len(swingData)):  # Swing Frequency Analyzer
         if i > 0 and i + 1 < len(swingData):  # Checks done so we don't try to access data that doesn't exist
             SF = 2 / (swingData[i + 1]['time'] - swingData[i - 1]['time'])  # Swing Frequency
         else:
             SF = 0
         swingData[i]['frequency'] = SF
-    patternFound = False
     SFList = [freq['frequency'] for freq in swingData]
-    SFmargin = average(SFList) / 32
-    patternList = []  # Pattern List
+    
+    patternFound = False
+    SFmargin = average(SFList) / 32     # Dymically determine margins
+    patternList = []  # A list of patterns, each pattern is a list of notes.
     tempPlist = []  # Temp Pattern List
     for i in range(0, len(swingData)):
         if i > 0:
             # Tries to find Patterns within margin
-            if (1 / (swingData[i]['time'] - swingData[i - 1]['time'])) - swingData[i]['frequency'] <= SFmargin:
+            if abs((1 / (swingData[i]['time'] - swingData[i - 1]['time'])) - swingData[i]['frequency']) <= SFmargin:
                 if not patternFound:  # Found a pattern and it's the first one?
                     patternFound = True
                     del tempPlist[-1]

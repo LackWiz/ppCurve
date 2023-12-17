@@ -13,12 +13,21 @@ with open(JSON_Path, encoding='ISO-8859-1') as playlist_json:
 xPair = []
 y1Pair = []
 y2Pair = []
-print("1 for basic PP vs Star, 2 for advanced")
+print("1 for Player PP vs Difficulty (pass star), 2 for Player PP vs 95% Star (overall star), 3 for Player ACC vs Acc star rating, 4 for custom (keys may be cAsE sEnSaTiVe)")
 xKey = input()
 if xKey == '1':
-    xKey = 'Pass'
+    xKey = 'Pass Rating'
     y1Key = 'playerPP'
     y2Key = 'null'
+elif xKey == '2':
+    xKey = '95% Star'
+    y1Key = 'playerPP'
+    y2Key = 'null'
+elif xKey == '3':
+    xKey = 'Acc Rating'
+    y1Key = 'acc'
+    y2Key = 'null'
+
 else:
     print("xKey to use")
     xKey = input()

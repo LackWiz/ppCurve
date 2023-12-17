@@ -5,6 +5,7 @@ import os
 import Tech_Calculator.tech_calc as tech_calc
 import Tech_Calculator._BackendFiles.setup as setup
 import math
+import csv
 
 playerTestList = [3225556157461414,76561198225048252, 76561198059961776, 76561198072855418, 76561198075923914,
                   76561198255595858, 76561198404774259,
@@ -14,10 +15,10 @@ playerTestList = [3225556157461414,76561198225048252, 76561198059961776, 7656119
                   2169974796454690, 76561198166289091,
                   76561198285246326, 76561198802040781, 76561198110018904, 76561198044544317, 2092178757563532,
                   76561198311143750, 76561198157672038,
-                  76561199050525271, 76561198272028078, 76561198027274310, 76561198073989976]
+                  76561199050525271, 76561198272028078, 76561198027274310, 76561198073989976, 1922350521131465]
 
 
-# playerTestList = [76561198073989976]
+# playerTestList = [1922350521131465]
 
 def searchDiffIndex(diffNum, diffList):
     for f in range(0, len(diffList)):
@@ -238,27 +239,29 @@ def newPlayerStats(userID, scoreCount, retest=False, versionNum=-1):
                     passRating = songStats['lackStats']['balanced_pass_diff']
                     tech = songStats['lackStats']['balanced_tech']
 
-                    passPP = 15.2 * math.exp(math.pow(passRating, 1 / 2.62)) - 30
-
-                    if passPP < 0:
-                        passPP = 0
+                    
 
                     if AIacc != 0:
-                        AI600Star = 15 / pointList1(AIacc + 0.0022)
+                        AI600Star = 15 / pointList1(AIacc)
                     else:
                         tinyTech = 0.0208 * tech + 1.1284  # https://www.desmos.com/calculator/yaqyyomsp9
                         AI600Star = (-math.pow(tinyTech, -passRating) + 1) * 8 + 2 + 0.01 * tech * passRating
+                    
+                    passPP = 15 * math.exp(math.pow(passRating, 1 / 2.62)) - 30
+                    if passPP < 0:
+                        passPP = 0
 
                     playerTechPP = math.exp(1.9 * playerACC) * 1.08 * tech
                     playerAccPP = pointList2(playerACC) * AI600Star * 34
-                    playerPP = inflate(passPP + playerAccPP + playerTechPP)
+                    playerPP = passPP + playerAccPP + playerTechPP
 
                     newStats.append({})
                     newStats[-1]['name'] = playerJSON['data'][i]['leaderboard']['song']['name']
                     newStats[-1]['diff'] = playerJSON['data'][i]['leaderboard']['difficulty']['difficultyName']
-                    newStats[-1]['Pass'] = passRating
-                    newStats[-1]['Acc'] = AI600Star
-                    newStats[-1]['Tech'] = tech
+                    newStats[-1]['Pass Rating'] = passRating
+                    newStats[-1]['Acc Rating'] = AI600Star
+                    newStats[-1]['Tech Rating'] = tech
+                    newStats[-1]['BL 95% Star'] = playerJSON['data'][i]['leaderboard']['difficulty']['stars']
                     newStats[-1]['Modifiers'] = playerJSON['data'][i]['modifiers']
                     newStats[-1]['acc'] = playerACC
                     newStats[-1]['oldPP'] = playerJSON['data'][i]['pp']
@@ -266,6 +269,8 @@ def newPlayerStats(userID, scoreCount, retest=False, versionNum=-1):
                     newStats[-1]['techPP'] = playerTechPP
                     newStats[-1]['accPP'] = playerAccPP
                     newStats[-1]['playerPP'] = playerPP
+
+                    
 
 
     newStats = sorted(newStats, key=lambda x: x.get('playerPP', 0), reverse=True)
@@ -296,6 +301,18 @@ def newPlayerStats(userID, scoreCount, retest=False, versionNum=-1):
     newStats = sorted(newStats, key=lambda x: x.get('oldPP', 0), reverse=True)
     with open(f'{filePath}/dataOldPP.json', 'w') as data_json:
         json.dump(newStats, data_json, indent=4)
+
+    
+    
+    newStats = sorted(newStats, key=lambda x: x.get('playerPP', 0), reverse=True)
+    excelFileName = os.path.join(f"{filePath}/export.csv")
+    try:
+        x = open(excelFileName, 'w', newline="", encoding='utf8')
+    finally:
+        dict_writer = csv.DictWriter(x, newStats[0].keys())
+        dict_writer.writeheader()
+        dict_writer.writerows(newStats)
+        x.close()
 
 
 if __name__ == "__main__":
