@@ -115,6 +115,10 @@ def findStandardDiffs(songPath: str):    # Returns a list of all avilable song d
     for f in range(0, len(infoDat["_difficultyBeatmapSets"][characteristicIndex]["_difficultyBeatmaps"])):
         difflist.append(infoDat["_difficultyBeatmapSets"][characteristicIndex]["_difficultyBeatmaps"][f]["_difficultyRank"]) #Store all avilable difficulties
     return difflist
+def findCharacteristicIndex(songPath: str, characteristic: str):
+    infoDat = load_json_as_dict(findInfoFile(songPath))
+    characteristicIndex = findStandardCharacteristicIndex(infoDat, characteristic)
+    return characteristicIndex
 def diffNum_to_diffPath(songPath: str, diffNum: int):     #Returns the File Path of whichever difficulty under test based on the difficulty Number
     files = os.listdir(songPath)
     match diffNum:
@@ -153,12 +157,15 @@ def loadInfoData(mapID: str, isuser=True):
     infoPath = findInfoFile(songPath)
     infoData = load_json_as_dict(infoPath)
     return infoData
-def loadMapData(mapID: str, diffNum: int, isuser=True):
+def loadMapData(mapID: str, diffNum: int, isuser=True, index=False):
     songPath = findSongPath(mapID, isuser)
     diffList = findStandardDiffs(songPath)
+    charIndex = findCharacteristicIndex(songPath, "Standard")
     if diffNum in diffList:     # Check if the song is listed in the Info.dat file, otherwise exits programs
         diffPath = diffNum_to_diffPath(songPath, diffNum)
         mapData = load_json_as_dict(diffPath)
+        if index:
+            return mapData, charIndex
         return mapData
     else:
         print(f"Map {mapID} Diff {diffNum} doesn't exist locally. Are you sure you have the updated version?")
