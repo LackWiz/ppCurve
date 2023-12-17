@@ -6,7 +6,7 @@ import Tech_Calculator.tech_calc as tech_calc
 import Tech_Calculator._BackendFiles.setup as setup
 import math
 
-playerTestList = [3225556157461414,76561198225048252, 76561198059961776, 76561198072855418, 76561198075923914,
+playerTestList = [3225556157461414, 76561198225048252, 76561198059961776, 76561198072855418, 76561198075923914,
                   76561198255595858, 76561198404774259,
                   76561198110147969, 76561198081152434, 76561198204808809, 76561198072431907,
                   76561198989311828, 76561198960449289,
@@ -142,7 +142,8 @@ def load_Song_Stats(dataJSON, speed, key, retest=False, versionNum=-1):
     hash = dataJSON['leaderboard']['song']['hash'].upper()
     AiJSON = {}
     try:
-        with open(f"_AIcache/{hash}/{diffNum} {speed}.json", encoding='ISO-8859-1') as score_json:      # Checkes if the result has already been calculated before
+        with open(f"_AIcache/{hash}/{diffNum} {speed}.json",
+                  encoding='ISO-8859-1') as score_json:  # Checkes if the result has already been calculated before
             AiJSON = json.load(score_json)
         print("Cache Hit")
         try:
@@ -152,9 +153,15 @@ def load_Song_Stats(dataJSON, speed, key, retest=False, versionNum=-1):
         finally:
             if retest and cacheVNum != versionNum:
                 infoData = setup.loadInfoData(key, False)
-                mapData = setup.loadMapData(key, diffNum, False)
+                (mapData, charIndex) = setup.loadMapData(key, diffNum, False, True)
                 bpm = infoData['_beatsPerMinute'] * speed
-                AiJSON['lackStats'] = tech_calc.mapCalculation(mapData, bpm, False, False)
+                beatmapSets = infoData['_difficultyBeatmapSets'][charIndex]['_difficultyBeatmaps']
+                njs = 0
+                for i in range(0, len(beatmapSets)):
+                    if beatmapSets[i]["_difficultyRank"] == diffNum:
+                        njs = beatmapSets[i]['_noteJumpMovementSpeed'] * speed
+                        break
+                AiJSON['lackStats'] = tech_calc.mapCalculation(mapData, bpm, njs, False, False)
                 AiJSON['versionNum'] = versionNum
                 result = s.get(
                     f"https://bs-replays-ai.azurewebsites.net/bl-reweight/{hash}/Standard/{diffNum}")
@@ -182,10 +189,16 @@ def load_Song_Stats(dataJSON, speed, key, retest=False, versionNum=-1):
         else:
             AiJSON['AIstats'] = json.loads(result.text)
         infoData = setup.loadInfoData(key, False)
-        mapData = setup.loadMapData(key, diffNum, False)
+        (mapData, charIndex) = setup.loadMapData(key, diffNum, False, True)
         bpm = infoData['_beatsPerMinute'] * speed
+        beatmapSets = infoData['_difficultyBeatmapSets'][charIndex]['_difficultyBeatmaps']
+        njs = 0
+        for i in range(0, len(beatmapSets)):
+            if beatmapSets[i]["_difficultyRank"] == diffNum:
+                njs = beatmapSets[i]['_noteJumpMovementSpeed'] * speed
+                break
         if mapData != None:
-            AiJSON['lackStats'] = tech_calc.mapCalculation(mapData, bpm, False, False)
+            AiJSON['lackStats'] = tech_calc.mapCalculation(mapData, bpm, njs, False, False)
         else:
             AiJSON['lackStats'] = {'balanced_tech': 0, 'balanced_pass_diff': 0}
         try:
@@ -204,8 +217,8 @@ def newPlayerStats(userID, scoreCount, retest=False, versionNum=-1):
     newStats = []
     pageNumber = 0
     playerJSON = {'data': []}
-    
-    while scoreCount > 0:       # New API limits is 100 requests per call, so iterate through until all requestes scores are obtained
+
+    while scoreCount > 0:  # New API limits is 100 requests per call, so iterate through until all requestes scores are obtained
         pageNumber += 1
         result = s.get(
             f"https://api.beatleader.xyz/player/{userID}/scores?sortBy=pp&order=desc&page={pageNumber}&count={100}")
@@ -219,9 +232,11 @@ def newPlayerStats(userID, scoreCount, retest=False, versionNum=-1):
     for i in range(0, len(playerJSON['data'])):
         if playerJSON['data'][i]['pp'] != 0:
             key = getKey(playerJSON['data'][i])
-            if playerJSON['data'][i]['leaderboard']['difficulty']['status'] == 3:              # Checks if the difficulty is ranked. discords qualified maps
-                if playerJSON['data'][i]['leaderboard']['difficulty']['modeName'] == 'Standard':  # Filters out only standard maps/difficulties
-                # if [i for i in ['Standard', 'OneSaber'] if i in playerJSON['data'][i]['leaderboard']['difficulty']['modeName']]:
+            if playerJSON['data'][i]['leaderboard']['difficulty'][
+                'status'] == 3:  # Checks if the difficulty is ranked. discords qualified maps
+                if playerJSON['data'][i]['leaderboard']['difficulty'][
+                    'modeName'] == 'Standard':  # Filters out only standard maps/difficulties
+                    # if [i for i in ['Standard', 'OneSaber'] if i in playerJSON['data'][i]['leaderboard']['difficulty']['modeName']]:
                     speed = convertSpeed(playerJSON['data'][i]['modifiers'].split(','))
                     songStats = load_Song_Stats(playerJSON['data'][i], speed, key, retest, versionNum)
                     modifier = playerJSON['data'][i]['modifiers']
@@ -266,7 +281,6 @@ def newPlayerStats(userID, scoreCount, retest=False, versionNum=-1):
                     newStats[-1]['techPP'] = playerTechPP
                     newStats[-1]['accPP'] = playerAccPP
                     newStats[-1]['playerPP'] = playerPP
-
 
     newStats = sorted(newStats, key=lambda x: x.get('playerPP', 0), reverse=True)
     playerName = playerName.replace("|", "")
