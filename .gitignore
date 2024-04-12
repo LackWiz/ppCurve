@@ -7,3 +7,5 @@ _BackendFiles/__pycache__/
 *.pyc
 _TestFiles/
 _songCache/
+*.rar
+deviationResults/deviation.json
