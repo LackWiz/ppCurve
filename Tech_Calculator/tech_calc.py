@@ -59,7 +59,7 @@ def mod(x, m):
 # Map preparation functions
 
 def V2_to_V3(V2mapData: dict):    # Convert V2 JSON to V3
-    newMapData = {'colorNotes':[], 'bombNotes':[], 'obstacles':[]}
+    newMapData = {'colorNotes':[], 'bombNotes':[], 'obstacles':[], 'sliders':[], 'burstSliders':[]}
     for i in range(0, len(V2mapData['_notes'])):
         if V2mapData['_notes'][i]['_type'] in [0, 1]:
             newMapData['colorNotes'].append({'b': V2mapData['_notes'][i]['_time']})
@@ -83,6 +83,8 @@ def V2_to_V3(V2mapData: dict):    # Convert V2 JSON to V3
             newMapData['obstacles'][-1]['h'] = 5
         newMapData['obstacles'][-1]['d'] = V2mapData['_obstacles'][i]['_duration']
         newMapData['obstacles'][-1]['w'] = V2mapData['_obstacles'][i]['_width']
+
+
     return newMapData
 
 def V3_3_0_to_V3(V3_0_0mapData: dict):
@@ -168,33 +170,67 @@ def mapPrep(mapData):
         newMapData = mapData
     else:       # New 3.3.0 spec omits default values, so we need to fill them in
         newMapData = V3_3_0_to_V3(mapData)
-    newMapData = sorted(newMapData, key=lambda d: d['b'])   # Sort data by time (beats).
+    
+    newMapData['colorNotes'] = sorted(newMapData['colorNotes'], key=lambda d: d['b'])   # Sort data by time (beats).
+    newMapData['bombNotes'] = sorted(newMapData['bombNotes'], key=lambda d: d['b']) # bombs
+    newMapData['obstacles'] = sorted(newMapData['obstacles'], key=lambda d: d['b']) # walls
+    newMapData['sliders'] = sorted(newMapData['sliders'], key=lambda d: d['b'])     # arcs
+    newMapData['brustSliders'] = sorted(newMapData['burstSliders'], key=lambda d: d['b'])   #chains
+
     return newMapData
 
-
-def splitMapData(mapData: dict, leftOrRight):  # False or 0 = Left, True or 1 = Right, 2 = Bombs
+def splitMapData(mapData: dict, leftOrRight):  # False or 0 = Left, True or 1 = Right, 2 = Bombs, 3 = Walls
     match leftOrRight:
         case 0:
-            blockList = [block for block in mapData['colorNotes'] if block['c'] == 0]
+            blockList = {}
+            blockList['notes'] = [block for block in mapData['colorNotes'] if block['c'] == 0]
+            blockList['arcs'] = [arcs for arcs in mapData['sliders'] if arcs['c'] == 0]
+            blockList['chains'] = [chains for chains in mapData['burstSliders'] if chains['c'] == 0]
         case 1:
-            blockList = [block for block in mapData['colorNotes'] if block['c'] == 1]
+            blockList = {}
+            blockList['notes'] = [block for block in mapData['colorNotes'] if block['c'] == 1]
+            blockList['arcs'] = [arcs for arcs in mapData['sliders'] if arcs['c'] == 1]
+            blockList['chains'] = [chains for chains in mapData['burstSliders'] if chains['c'] == 1]
         case 2:
             blockList = [bomb for bomb in mapData['bombNotes']]
+        case 3:
+            blockList = [wall for wall in mapData['obstacles']]
     return blockList
 
 # Base block calculations
-# Block good hitbox X = 0.8m, Y = 0.5m, Z = 1m
-# Hitbox is Z = -0.15m offset from block position 
+
+
+def primarySwings(objectData, bombData, handedness):    # handedness: 0 = left, 1 = right
+    notes = objectData['notes']
+    arcs = objectData['arcs']
+    chains = objectData['chains']
+    arc_index = 0
+    next_arc_beat = arcs[0]['b']
+
+    # beat: The time of the swing
+    # LRhand: left or right hand
+    # swingAngle: the angle of the swing
+    # angleRequirement: angle strictness
+
+    swingData = [{'beat', 'LRhand', 'swingAngle','angleRequirement', 'preAngleEnabled', 'postAngleEnabled', 'freePoints', 'totalPoints'}]
+    
+    
+
+
+
+    return 0
 
 
 # Calculates the entry point of a swing given block position, block angle, and swing angle.
-def calculateSwingEntry(cBlockP: list, cBlockA, swingA = 0):
+def calculateSwingEntry(cBlockP: list, cBlockA, swingA = -1):
+    # Block good hitbox X = 0.8m, Y = 0.5m, Z = 1m
+    # Hitbox is Z = -0.15m offset from block position 
     # Distance between 2 blocks on the X axis is 0.436m. /2 equals X middle point of the block hitbox.
     # baseXPosition = 0.21818
     
     # Distance between 2 blocks on the Y axis is average 0.525m. /2 equals Y middle point of the block hitbox.
     # baseYPosition = 0.2625
-    if swingA == 0:
+    if swingA == -1:
         swingA = cBlockA
     
     middlePoint = [cBlockP[0] * 0.43636 + 0.21818, 
@@ -203,52 +239,13 @@ def calculateSwingEntry(cBlockP: list, cBlockA, swingA = 0):
     topPoint = [middlePoint[0] - math.cos(math.radians(cBlockA)) * 0.4, 
                 middlePoint[0] - math.sin(math.radians(cBlockA)) * 0.25]
     
-    xDistance = 0.4 * math.cos(math.radians(cBlockA - swingA))
+    xDistance = 0.4 * math.sin(math.radians(swingA - cBlockA))
     swingPoint = [topPoint[0] + xDistance * math.sin(math.radians(cBlockA - 180)), 
                   topPoint[1] - xDistance * math.cos(math.radians(cBlockA - 180))]
 
     return swingPoint
 
 # Try to find if placement match for slider
-def isSlider(prev, next, direction, dot):
-    if dot is True:
-        if prev['x'] == next['x'] and prev['y'] == next['y']:
-            return True
-    if 67.5 < direction <= 112.5:
-        if prev['y'] < next['y']:
-            return True
-    elif 247.5 < direction <= 292.5:
-        if prev['y'] > next['y']:
-            return True
-    elif 157.5 < direction <= 202.5:
-        if prev['x'] > next['x']:
-            return True
-    elif 0 <= direction <= 22.5 or 337.5 < direction < 360:
-        if prev['x'] < next['x']:
-            return True
-    elif 112.5 < direction <= 157.5:
-        if prev['y'] < next['y']:
-            return True
-        if prev['x'] > next['x']:
-            return True
-    elif 22.5 < direction <= 67.5:
-        if prev['y'] < next['y']:
-            return True
-        if prev['x'] < next['x']:
-            return True
-    elif 202.5 < direction <= 247.5:
-        if prev['y'] > next['y']:
-            return True
-        if prev['x'] > next['x']:
-            return True
-    elif 292.5 < direction <= 337.5:
-        if prev['y'] > next['y']:
-            return True
-        if prev['x'] < next['x']:
-            return True
-    return False
-
-
 
 def swingCurveCalc(swingData: list, leftOrRight, isuser=True):
     if len(swingData) < 2:
@@ -279,6 +276,11 @@ def techOperations(mapData, bpm, isuser=True, verbose=True):
     LeftMapData = splitMapData(mapData, 0)
     RightMapData = splitMapData(mapData, 1)
     BombData = splitMapData(mapData, 2)
+    WallData = splitMapData(mapData, 3)
+    LeftBaseSwingData = primarySwings(LeftMapData, BombData, 0)
+    RightBaseSwingData = primarySwings(RightMapData, BombData, 1)
+
+
     LeftSwingData = []
     RightSwingData = []
 
