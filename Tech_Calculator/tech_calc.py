@@ -14,10 +14,11 @@ from collections import deque
 # Works for both V2 and V3
 # Easy = 1, Normal = 3, Hard = 5, Expert = 7, Expert+ = 9
 # b = time, x and y = grid location from bottom left, a = angle offset, c = left or right respectively, d = direction
-cut_direction_index = [90, 270, 180, 0, 135, 45, 225, 315, 270]
+cut_direction_index = [90, 270, 180, 0, 135, 45, 225, 315, 270]     # mathamatical 0°, direction of cut
 right_handed_angle_strain_forehand = 247.5  # Most comfortable angle to aim for right hand 270 - 45 or 247.5
 left_handed_angle_strain_forehand = 292.5  # 270 + 45 or 292.5
 
+# GLobal base functions
 
 def average(lst, setLen=0):  # Returns the averate of a list of integers
     if len(lst) > 0:
@@ -27,7 +28,6 @@ def average(lst, setLen=0):  # Returns the averate of a list of integers
             return sum(lst) / setLen
     else:
         return 0
-
 
 def bernstein_poly(i, n, t):
     return comb(n, i) * (t ** (n - i)) * (1 - t) ** i
@@ -41,6 +41,22 @@ def bezier_curve(points, nTimes=1000):
     polynomial_array = np.array([bernstein_poly(i, nPoints - 1, t) for i in range(0, nPoints)])
     return list(np.dot(xPoints, polynomial_array)), list(np.dot(yPoints, polynomial_array))
 
+def reverseCutDirection(angle):
+    if angle >= 180:
+        return angle - 180
+    else:
+        return angle + 180
+
+
+def swapPositions(lis: list, pos1, pos2):
+    lis[pos1], lis[pos2] = lis[pos2], lis[pos1]
+    return lis
+
+# X is the input, m is the module value.
+def mod(x, m):
+    return (x % m + m) % m
+
+# Map preparation functions
 
 def V2_to_V3(V2mapData: dict):    # Convert V2 JSON to V3
     newMapData = {'colorNotes':[], 'bombNotes':[], 'obstacles':[]}
@@ -152,54 +168,46 @@ def mapPrep(mapData):
         newMapData = mapData
     else:       # New 3.3.0 spec omits default values, so we need to fill them in
         newMapData = V3_3_0_to_V3(mapData)
+    newMapData = sorted(newMapData, key=lambda d: d['b'])   # Sort data by time (beats).
     return newMapData
 
 
-def splitMapData(mapData: dict, leftOrRight: int):  # False or 0 = Left, True or 1 = Right, 2 = Bombs
-    if leftOrRight == 0:
-        blockList = [block for block in mapData['colorNotes'] if block['c'] == 0]
-    elif leftOrRight == 1:
-        blockList = [block for block in mapData['colorNotes'] if block['c'] == 1]
-    else:
-        blockList = [bomb for bomb in mapData['bombNotes']]
+def splitMapData(mapData: dict, leftOrRight):  # False or 0 = Left, True or 1 = Right, 2 = Bombs
+    match leftOrRight:
+        case 0:
+            blockList = [block for block in mapData['colorNotes'] if block['c'] == 0]
+        case 1:
+            blockList = [block for block in mapData['colorNotes'] if block['c'] == 1]
+        case 2:
+            blockList = [bomb for bomb in mapData['bombNotes']]
     return blockList
 
-
-def calculateBaseEntryExit(cBlockP, cBlockA):
-    entry = [cBlockP[0] * 0.333333 - math.cos(math.radians(cBlockA)) * 0.166667 + 0.166667,
-             cBlockP[1] * 0.333333 - math.sin(math.radians(cBlockA)) * 0.166667 + 0.16667]
-    exit = [cBlockP[0] * 0.333333 + math.cos(math.radians(cBlockA)) * 0.166667 + 0.166667,
-            cBlockP[1] * 0.333333 + math.sin(math.radians(cBlockA)) * 0.166667 + 0.16667]
-    return entry, exit
+# Base block calculations
+# Block good hitbox X = 0.8m, Y = 0.5m, Z = 1m
+# Hitbox is Z = -0.15m offset from block position 
 
 
-def isSameDirection(pBlockA, cBlockA):
-    pBlockA = mod(pBlockA, 360)
-    cBlockA = mod(cBlockA, 360)
-    if abs(pBlockA - cBlockA) <= 180:
-        if abs(pBlockA - cBlockA) < 67.5:
-            return True
-    else:
-        if 360 - abs(pBlockA - cBlockA) < 67.5:
-            return True
-    return False
+# Calculates the entry point of a swing given block position, block angle, and swing angle.
+def calculateSwingEntry(cBlockP: list, cBlockA, swingA = 0):
+    # Distance between 2 blocks on the X axis is 0.436m. /2 equals X middle point of the block hitbox.
+    # baseXPosition = 0.21818
+    
+    # Distance between 2 blocks on the Y axis is average 0.525m. /2 equals Y middle point of the block hitbox.
+    # baseYPosition = 0.2625
+    if swingA == 0:
+        swingA = cBlockA
+    
+    middlePoint = [cBlockP[0] * 0.43636 + 0.21818, 
+                   cBlockP[1] * 0.525  + 0.2625]
+    
+    topPoint = [middlePoint[0] - math.cos(math.radians(cBlockA)) * 0.4, 
+                middlePoint[0] - math.sin(math.radians(cBlockA)) * 0.25]
+    
+    xDistance = 0.4 * math.cos(math.radians(cBlockA - swingA))
+    swingPoint = [topPoint[0] + xDistance * math.sin(math.radians(cBlockA - 180)), 
+                  topPoint[1] - xDistance * math.cos(math.radians(cBlockA - 180))]
 
-
-def reverseCutDirection(angle):
-    if angle >= 180:
-        return angle - 180
-    else:
-        return angle + 180
-
-
-def swapPositions(lis: list, pos1, pos2):
-    lis[pos1], lis[pos2] = lis[pos2], lis[pos1]
-    return lis
-
-# X is the input, m is the module value.
-def mod(x, m):
-    return (x % m + m) % m
-
+    return swingPoint
 
 # Try to find if placement match for slider
 def isSlider(prev, next, direction, dot):
@@ -241,89 +249,12 @@ def isSlider(prev, next, direction, dot):
     return False
 
 
-# Find next angle by using last known position, next position and a guide angle
-
-
-
-
-
-
-# Find pattern note if possible and then swap element for them to be in order
-
-
-
-# Find angle in degree for each note
-# Proceed to fix some possible issue afterward
-
-
-
-# Convert notes and patterns into swing data
-
-
-
-
-
-
-
-
-
-# Split the long list of dictionaries into smaller lists of patterns containing lists of dictionaries
-def patternSplitter(swingData: list):
-    
-    if len(swingData) < 2:          # You need at least 3 notes before any kind of frequency calculation can be made
-        return []
-    
-    for i in range(0, len(swingData)):  # Swing Frequency Analyzer
-        if i > 0 and i + 1 < len(swingData):  # Checks done so we don't try to access data that doesn't exist
-            SF = 2 / (swingData[i + 1]['time'] - swingData[i - 1]['time'])  # Swing Frequency
-        else:
-            SF = 0
-        swingData[i]['frequency'] = SF
-    SFList = [freq['frequency'] for freq in swingData]
-    
-    patternFound = False
-    SFmargin = average(SFList) / 32     # Dymically determine margins
-    patternList = []  # A list of patterns, each pattern is a list of notes.
-    tempPlist = []  # Temp Pattern List
-    for i in range(0, len(swingData)):
-        if i > 0:
-            # Tries to find Patterns within margin
-            if abs((1 / (swingData[i]['time'] - swingData[i - 1]['time'])) - swingData[i]['frequency']) <= SFmargin:
-                if not patternFound:  # Found a pattern and it's the first one?
-                    patternFound = True
-                    del tempPlist[-1]
-                    if len(tempPlist) > 0:  # We only want to store lists with stuff
-                        patternList.append(tempPlist)
-                    tempPlist = [swingData[i - 1]]  # Store the 1st block of the pattern
-                tempPlist.append(swingData[i])  # Store the block we're working on
-            else:
-                if len(tempPlist) > 0 and patternFound:
-                    tempPlist.append(swingData[i])
-                    patternList.append(tempPlist)
-                    tempPlist = []
-                else:
-                    patternFound = False
-                    tempPlist.append(swingData[i])
-        else:
-            tempPlist.append(swingData[0])
-    return patternList
-
-
-# Test parity with angle strain
-# Apply best swing angle strain
-# Set if the swing is a reset or is forehand
-
 
 def swingCurveCalc(swingData: list, leftOrRight, isuser=True):
     if len(swingData) < 2:
         return [], []
-    swingData[0]['pathStrain'] = 0  # First Note cannot really have any path strain
-    swingData[0]['positionComplexity'] = 0
-    swingData[0]['preDistance'] = 0
-    swingData[0]['curveComplexity'] = 0
-    swingData[0]['pathAngleStrain'] = 0
     testData = []
-    for i in range(1, len(swingData)):
+    for i in range(1, len(swingData)):  ## Generates the list of points for the curve.
         point0 = swingData[i - 1]['exitPos']  # Curve Beginning
         point1x = point0[0] + 1 * math.cos(math.radians(swingData[i - 1]['angle']))
         point1y = point0[1] + 1 * math.sin(math.radians(swingData[i - 1]['angle']))
