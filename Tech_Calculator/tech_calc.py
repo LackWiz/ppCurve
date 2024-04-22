@@ -1,3 +1,4 @@
+from asyncio.windows_events import NULL
 import math
 import sys
 sys.path.insert(0, 'Tech_Calculator')
@@ -197,24 +198,278 @@ def splitMapData(mapData: dict, leftOrRight):  # False or 0 = Left, True or 1 = 
             blockList = [wall for wall in mapData['obstacles']]
     return blockList
 
+def calculateJD(bpm, njs, offset):
+    halfjump = 4
+    num = 60 / bpm
+    
+    if njs <= 0.01:
+        njs = 10
+    
+    while (njs * num * halfjump > 18):
+        halfjump /= 2
+
+    halfjump += offset
+
+    if halfjump < 0.25:
+        halfjump = 0.25
+
+    jumpdistance = njs * num * halfjump * 2
+
+    return jumpdistance
+
+def distanceToBeats(bpm, njs, distance):
+    time = distance / njs
+    beats = time * bpm / 60
+
+    return beats
+
+def swingXangle(blockPos, handPos):
+    return math.degrees(math.asin(handPos[0] - blockPos[0]))
+
+def bindArcsToNotes(noteData, chainData, arcData):
+    noteData_index = 0
+    noteData_index_t = 0
+    chainData_index = 0
+    chainData_index_t = 0
+
+    for i in range(0, len(noteData)):
+        noteData[i]['preArc'] = False              # Initialize dict key
+        noteData[i]['postArc'] = False
+
+    for i in range(0, len(chainData)):
+        chainData[i]['preArc'] = False              # Initialize dict key
+        chainData[i]['postArc'] = False
+
+    for i in range(0, len(arcData)):
+        
+        while noteData[noteData_index]['b'] < arcData[i]['b'] and noteData_index + 1 < len(noteData):      # Increase index until right below correct note (time)
+            noteData_index += 1
+
+        while noteData[noteData_index_t]['b'] < arcData[i]['tb'] and noteData_index_t + 1 < len(noteData):      # Increase index until right below correct note (time)
+            noteData_index_t += 1
+        
+        while chainData[chainData_index]['b'] < arcData[i]['b'] and chainData_index + 1 < len(chainData):    # Increase index until right below correct note (time)
+            chainData_index += 1
+
+        while chainData[chainData_index_t]['b'] < arcData[i]['tb'] and chainData_index_t + 1 < len(chainData):      # Increase index until right below correct note (time)
+            chainData_index_t += 1
+
+        sameTimeList = []   # Reset list
+        found = False
+
+        while True: # Arc beginning note check
+            if noteData[noteData_index]['b'] == arcData[i]['b']:
+                sameTimeList.append({'data': noteData[noteData_index], 'index': noteData_index})
+
+                if noteData_index + 1 < len(noteData):
+                    while noteData[noteData_index + 1]['b'] == arcData[i]['b'] and noteData_index + 1 < len(noteData):
+                        noteData_index += 1
+                        sameTimeList.append({'data': noteData[noteData_index], 'index': noteData_index})
+                
+                for j in range(0, len(sameTimeList)):
+                    if (sameTimeList[j]['data']['x'] == arcData[i]['x']) and (sameTimeList[j]['data']['y'] == arcData[i]['y']) and ((sameTimeList[j]['data']['d'] == arcData[i]['d']) or (sameTimeList[j]['data']['d'] == 8)):
+                        noteData[sameTimeList[j]['index']]['postArc'] = True
+                        found = True
+                        break
+            else:
+                if noteData[noteData_index]['b'] > arcData[i]['b']:
+                    break   # If the note index is greater than arc time, then there was no pre
+                
+                if noteData_index + 1 >= len(noteData):
+                    break
+
+                noteData_index += 1
+            
+            if found:
+                break
+
+        sameTimeList = []   # Reset list
+        found = False
+
+        while True: # Arc ending note check
+            if noteData[noteData_index_t]['b'] == arcData[i]['tb']:
+                sameTimeList.append({'data': noteData[noteData_index_t], 'index': noteData_index_t})
+
+                if noteData_index_t + 1 < len(noteData):
+                    while noteData[noteData_index_t + 1]['b'] == arcData[i]['tb'] and noteData_index_t + 1 < len(noteData):
+                        noteData_index_t += 1
+                        sameTimeList.append({'data': noteData[noteData_index_t], 'index': noteData_index_t})
+                
+                for j in range(0, len(sameTimeList)):
+                    if (sameTimeList[j]['data']['x'] == arcData[i]['tx']) and (sameTimeList[j]['data']['y'] == arcData[i]['ty']) and ((sameTimeList[j]['data']['d'] == arcData[i]['tc']) or (sameTimeList[j]['data']['d'] == 8)):
+                        noteData[sameTimeList[j]['index']]['preArc'] = True
+                        found = True
+                        break
+            else:
+                if noteData[noteData_index_t]['b'] > arcData[i]['b']:
+                    break   # If the note index is greater than arc time, then there was no post
+                
+                if noteData_index_t + 1 >= len(noteData):
+                    break
+
+                noteData_index_t += 1
+
+            if found:
+                break
+        
+        sameTimeList = []   # Reset list
+        found = False
+
+        while True: # Arc beginning chain check
+            if chainData[chainData_index]['b'] == arcData[i]['b']:
+                sameTimeList.append({'data': chainData[chainData_index], 'index': chainData_index})
+
+                if chainData_index + 1 < len(chainData):
+                    while chainData[chainData_index + 1]['b'] == arcData[i]['b'] and chainData_index + 1 < len(chainData):
+                        chainData_index += 1
+                        sameTimeList.append({'data': chainData[chainData_index], 'index': chainData_index})
+                
+                for j in range(0, len(sameTimeList)):
+                    if (sameTimeList[j]['data']['x'] == arcData[i]['x']) and (sameTimeList[j]['data']['y'] == arcData[i]['y']) and ((sameTimeList[j]['data']['d'] == arcData[i]['d']) or (sameTimeList[j]['data']['d'] == 8)):
+                        chainData[sameTimeList[j]['index']]['postArc'] = True
+                        found = True
+                        break
+            else:
+                if chainData[chainData_index]['b'] > arcData[i]['b']:
+                    break   # If the note index is greater than arc time, then there was no pre
+
+                if chainData_index + 1 >= len(chainData):
+                    break
+                
+                chainData_index += 1
+
+            if found:
+                break
+
+        sameTimeList = []   # Reset list
+        found = False
+
+        while True: # Arc ending chain check
+            if chainData[chainData_index_t]['b'] == arcData[i]['tb']:
+                sameTimeList.append({'data': chainData[chainData_index_t], 'index': chainData_index_t})
+
+                if chainData_index_t + 1 < len(chainData):
+                    while chainData[chainData_index_t + 1]['b'] == arcData[i]['tb'] and chainData_index_t + 1 < len(chainData):
+                        chainData_index_t += 1
+                        sameTimeList.append({'data': chainData[chainData_index_t], 'index': chainData_index_t})
+                
+                for j in range(0, len(sameTimeList)):
+                    if (sameTimeList[j]['data']['x'] == arcData[i]['tx']) and (sameTimeList[j]['data']['y'] == arcData[i]['ty']) and ((sameTimeList[j]['data']['d'] == arcData[i]['tc']) or (sameTimeList[j]['data']['d'] == 8)):
+                        chainData[sameTimeList[j]['index']]['preArc'] = True
+                        found = True
+                        break
+            else:
+                if chainData[chainData_index_t]['b'] > arcData[i]['b']:
+                    break   # If the note index is greater than arc time, then there was no post
+                
+                if chainData_index_t + 1 >= len(chainData):
+                    break
+
+                chainData_index_t += 1
+
+            if found:
+                break
+    return
+
+        
+            
+        
+
 # Base block calculations
 
 
-def primarySwings(objectData, bombData, handedness):    # handedness: 0 = left, 1 = right
+def primarySwings(objectData: dict, bombs: list, metadata: dict, handedness: int):    # handedness: 0 = left, 1 = right
+    # Purpose of the function is to turn notes into swings. All notes, including those included in sliders will get their own swing.
+    # Later swing smoothing will combine individual swing data into a smooth swing path for calculation
+
     notes = objectData['notes']
     arcs = objectData['arcs']
     chains = objectData['chains']
+    njs = metadata['njs']
+    bpm = metadata['bpm']
+    offset = metadata['offset']
+    
+    note_index = 0
     arc_index = 0
+    chain_index = 0
+    bomb_index = 0
+
+    next_note_beat = notes[0]['b']
     next_arc_beat = arcs[0]['b']
+    next_chain_beat = chains[0]['b']
+    next_bomb_beat = bombs[0]['b']
+
+    # # Collect all time data to track when events take place.
+    # timeData = [d.get('b') for d in notes]
+    # timeData += [d.get('b') for d in bombs]
+    # timeData += [d.get('b') for d in arcs]
+    # timeData += [d.get('tb') for d in arcs]
+    # timeData += [d.get('b') for d in chains]
+    # timeData += [d.get('tb') for d in chains]
+    # timeData = sorted(set(timeData))      # Remove duplicates and sort
+
+    jumpDistance = calculateJD(bpm, njs, offset)
+    lookAhead = distanceToBeats(bpm, njs, jumpDistance / 2)
+
+    
 
     # beat: The time of the swing
     # LRhand: left or right hand
-    # swingAngle: the angle of the swing
+    # handPos: [x, y]
+    # swingAngle: the angle of the swing [x, z]
+    # noteAngle: the angle of the note
     # angleRequirement: angle strictness
+    # swingAngleMargin: available angle margin, list [margin counterclockwise, margin clockwise]
+    # preAngleEnabled: if 100° pre swing angle is required (disabled for arcs)
+    # postAngleEnabled: if 60° post swing angle is required (disabled for arcs)
+    # freePoints: How many points were given for free (only applys for chain links)
+    # total points: Total points earnable from the swing
+    
 
-    swingData = [{'beat', 'LRhand', 'swingAngle','angleRequirement', 'preAngleEnabled', 'postAngleEnabled', 'freePoints', 'totalPoints'}]
+    swingData = []
+
+    bindArcsToNotes(notes, chains, arcs)
+
+
+    for i in range(0, len(notes)):
+        blockAngle = cut_direction_index[notes[i]['d']] + notes[i]['a']
+        hitboxStrikePos = calculateSwingEntry([notes[i]['x'], notes[i]['y']], blockAngle)
+        
+        # if i == 0:
+        #     hitboxStrikePos = calculateSwingEntry([notes[i]['x'], notes[i]['y']], blockAngle)
+        # else:
+        #     temp = calculateSwingEntry([notes[i]['x'], notes[i]['y']], blockAngle)
+        #     hitboxStrikePos = [(swingData[-2]['handPos'][0] + temp[0]) / 2, (swingData[-2]['handPos'][1] + temp[1]) / 2]
+        
+        
+        
+        swingData.append({})
+        swingData[-1]['beat'] = notes[i]['b']
+        swingData[-1]['LRhand'] = handedness
+        swingData[-1]['handPos'] = hitboxStrikePos
+        swingData[-1]['swingAngle'] = [0, blockAngle]
+        swingData[-1]['noteAngle'] = blockAngle
+        swingData[-1]['angleRequirement'] = 120
+        swingData[-1]['swingAngleMargin'] = [60, 60]
+
+        if swingData[-1]['beat'] >= next_arc_beat:
+            if handedness == arcs[arc_index]['c']:
+                pass
+
+            arc_index += 1
+            next_arc_beat = arcs[arc_index]['b']
+
+
+
+        
+
+        
+        
+
     
-    
+    next_arc_beat = arcs[arc_index]['b']
+    next_chain_beat = chains[chain_index]['b']
+    next_bomb_beat = bombs[bomb_index]['b']
 
 
 
@@ -272,13 +527,13 @@ def combineAndSortList(array1, array2, key):
     return combinedArray
 
 
-def techOperations(mapData, bpm, isuser=True, verbose=True):
+def techOperations(mapData: dict, metadata: dict, isuser=True, verbose=True):
     LeftMapData = splitMapData(mapData, 0)
     RightMapData = splitMapData(mapData, 1)
     BombData = splitMapData(mapData, 2)
     WallData = splitMapData(mapData, 3)
-    LeftBaseSwingData = primarySwings(LeftMapData, BombData, 0)
-    RightBaseSwingData = primarySwings(RightMapData, BombData, 1)
+    LeftBaseSwingData = primarySwings(LeftMapData, BombData, metadata, 0)
+    RightBaseSwingData = primarySwings(RightMapData, BombData, metadata, 1)
 
 
     LeftSwingData = []
@@ -295,11 +550,11 @@ def techOperations(mapData, bpm, isuser=True, verbose=True):
     return 0     # returnDict
 
 
-def mapCalculation(mapData, bpm, isuser=True, verbose=True):
+def mapCalculation(mapData, metadata, isuser=True, verbose=True):
     t0 = time.time()
     newMapData = mapPrep(mapData)
     t1 = time.time()
-    data = techOperations(newMapData, bpm, isuser, verbose)
+    data = techOperations(newMapData, metadata, isuser, verbose)
     if isuser:
         print(f'Execution Time = {t1 - t0}')
     return data
@@ -310,7 +565,8 @@ if __name__ == "__main__":
     mapKey = input()
     mapKey = mapKey.replace("!bsr ", "")
     infoData = setup.loadInfoData(mapKey)
-    bpm = infoData['_beatsPerMinute']
+    metadata = {'bpm': infoData['_beatsPerMinute']}
+
     availableDiffs = setup.findStandardDiffs(setup.findSongPath(mapKey))
     if len(availableDiffs) > 1:
         print(f'Choose Diff num: {availableDiffs}')
@@ -319,6 +575,18 @@ if __name__ == "__main__":
         diffNum = availableDiffs[0]
         print(f'autoloading {diffNum}')
     mapData = setup.loadMapData(mapKey, diffNum)
-    mapCalculation(mapData, bpm, True, True)
+
+    for i, d in enumerate(infoData['_difficultyBeatmapSets']):
+        if d.get('_beatmapCharacteristicName') == 'Standard':
+            charIndex = i
+            break
+    for i, d in enumerate(infoData['_difficultyBeatmapSets'][i]['_difficultyBeatmaps']):
+        if d.get('_difficultyRank') == diffNum:
+            diffIndex = i
+            break
+    metadata['njs'] = infoData['_difficultyBeatmapSets'][charIndex]['_difficultyBeatmaps'][diffIndex]['_noteJumpMovementSpeed']
+    metadata['offset'] = infoData['_difficultyBeatmapSets'][charIndex]['_difficultyBeatmaps'][diffIndex]['_noteJumpStartBeatOffset']
+
+    mapCalculation(mapData, metadata, True, True)
     print("Done")
     input()
