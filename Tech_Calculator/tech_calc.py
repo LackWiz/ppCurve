@@ -18,7 +18,8 @@ from collections import deque
 cut_direction_index = [90, 270, 180, 0, 135, 45, 225, 315, 270]     # mathamatical 0°, direction of cut
 right_handed_angle_strain_forehand = 247.5  # Most comfortable angle to aim for right hand 270 - 45 or 247.5
 left_handed_angle_strain_forehand = 292.5  # 270 + 45 or 292.5
-
+xGridDistance = 0.43636   # In meters
+yGridDistance = 0.525   # In meters, averaged 0.55m between bottom and middle row, 0.5m between middle and top row. This will also be scaled according to users height 
 # GLobal base functions
 
 def average(lst, setLen=0):  # Returns the averate of a list of integers
@@ -32,7 +33,6 @@ def average(lst, setLen=0):  # Returns the averate of a list of integers
 
 def bernstein_poly(i, n, t):
     return comb(n, i) * (t ** (n - i)) * (1 - t) ** i
-
 
 def bezier_curve(points, nTimes=1000):
     nPoints = len(points)
@@ -48,7 +48,6 @@ def reverseCutDirection(angle):
     else:
         return angle + 180
 
-
 def swapPositions(lis: list, pos1, pos2):
     lis[pos1], lis[pos2] = lis[pos2], lis[pos1]
     return lis
@@ -56,6 +55,14 @@ def swapPositions(lis: list, pos1, pos2):
 # X is the input, m is the module value.
 def mod(x, m):
     return (x % m + m) % m
+
+#Not the correct way to define function input type, but it'll help someone.
+def PointOnQuadBezier(p0: np.array, p1: np.array, p2: np.array, t):
+    return list((math.pow(1 - t, 2) * p0) + (2 * (1 - t) * t * p1) + (math.pow(t, 2) * p2))
+
+def AngleOnQuadBezier(p0: np.array, p1: np.array, p2: np.array, t):
+    derivative = list((2 * (1 - t) * (p1 - p0)) + (2 * t * (p2 - p1)))
+    return mod(math.degrees(math.atan2(derivative[1], derivative[0])), 360)
 
 # Map preparation functions
 
@@ -226,45 +233,36 @@ def distanceToBeats(bpm, njs, distance):
 def swingXangle(blockPos, handPos):
     return math.degrees(math.asin(handPos[0] - blockPos[0]))
 
-def bindArcsToNotes(noteData, chainData, arcData):
+def bindArcsToNotes(noteData, arcData):
     noteData_index = 0
     noteData_index_t = 0
-    chainData_index = 0
-    chainData_index_t = 0
 
     for i in range(0, len(noteData)):
         noteData[i]['preArc'] = False              # Initialize dict key
         noteData[i]['postArc'] = False
 
-    for i in range(0, len(chainData)):
-        chainData[i]['preArc'] = False              # Initialize dict key
-        chainData[i]['postArc'] = False
-
     for i in range(0, len(arcData)):
-        
+        # Index preparation while loops
         while noteData[noteData_index]['b'] < arcData[i]['b'] and noteData_index + 1 < len(noteData):      # Increase index until right below correct note (time)
             noteData_index += 1
 
         while noteData[noteData_index_t]['b'] < arcData[i]['tb'] and noteData_index_t + 1 < len(noteData):      # Increase index until right below correct note (time)
             noteData_index_t += 1
-        
-        while chainData[chainData_index]['b'] < arcData[i]['b'] and chainData_index + 1 < len(chainData):    # Increase index until right below correct note (time)
-            chainData_index += 1
-
-        while chainData[chainData_index_t]['b'] < arcData[i]['tb'] and chainData_index_t + 1 < len(chainData):      # Increase index until right below correct note (time)
-            chainData_index_t += 1
 
         sameTimeList = []   # Reset list
         found = False
 
+        # Arc matcher while loops
         while True: # Arc beginning note check
             if noteData[noteData_index]['b'] == arcData[i]['b']:
                 sameTimeList.append({'data': noteData[noteData_index], 'index': noteData_index})
 
                 if noteData_index + 1 < len(noteData):
-                    while noteData[noteData_index + 1]['b'] == arcData[i]['b'] and noteData_index + 1 < len(noteData):
-                        noteData_index += 1
-                        sameTimeList.append({'data': noteData[noteData_index], 'index': noteData_index})
+                    if noteData[noteData_index + 1]['b'] == arcData[i]['b']:
+                        temp_index = noteData_index
+                        while noteData[temp_index + 1]['b'] == arcData[i]['b'] and temp_index + 1 < len(noteData):
+                            temp_index += 1
+                            sameTimeList.append({'data': noteData[temp_index], 'index': temp_index})
                 
                 for j in range(0, len(sameTimeList)):
                     if (sameTimeList[j]['data']['x'] == arcData[i]['x']) and (sameTimeList[j]['data']['y'] == arcData[i]['y']) and ((sameTimeList[j]['data']['d'] == arcData[i]['d']) or (sameTimeList[j]['data']['d'] == 8)):
@@ -291,9 +289,11 @@ def bindArcsToNotes(noteData, chainData, arcData):
                 sameTimeList.append({'data': noteData[noteData_index_t], 'index': noteData_index_t})
 
                 if noteData_index_t + 1 < len(noteData):
-                    while noteData[noteData_index_t + 1]['b'] == arcData[i]['tb'] and noteData_index_t + 1 < len(noteData):
-                        noteData_index_t += 1
-                        sameTimeList.append({'data': noteData[noteData_index_t], 'index': noteData_index_t})
+                    if noteData[noteData_index_t + 1]['b'] == arcData[i]['tb']:
+                        temp_index = noteData_index_t
+                        while noteData[temp_index + 1]['b'] == arcData[i]['tb'] and temp_index + 1 < len(noteData):
+                            temp_index += 1
+                            sameTimeList.append({'data': noteData[temp_index], 'index': temp_index})
                 
                 for j in range(0, len(sameTimeList)):
                     if (sameTimeList[j]['data']['x'] == arcData[i]['tx']) and (sameTimeList[j]['data']['y'] == arcData[i]['ty']) and ((sameTimeList[j]['data']['d'] == arcData[i]['tc']) or (sameTimeList[j]['data']['d'] == 8)):
@@ -311,72 +311,83 @@ def bindArcsToNotes(noteData, chainData, arcData):
 
             if found:
                 break
-        
-        sameTimeList = []   # Reset list
-        found = False
 
-        while True: # Arc beginning chain check
-            if chainData[chainData_index]['b'] == arcData[i]['b']:
-                sameTimeList.append({'data': chainData[chainData_index], 'index': chainData_index})
-
-                if chainData_index + 1 < len(chainData):
-                    while chainData[chainData_index + 1]['b'] == arcData[i]['b'] and chainData_index + 1 < len(chainData):
-                        chainData_index += 1
-                        sameTimeList.append({'data': chainData[chainData_index], 'index': chainData_index})
-                
-                for j in range(0, len(sameTimeList)):
-                    if (sameTimeList[j]['data']['x'] == arcData[i]['x']) and (sameTimeList[j]['data']['y'] == arcData[i]['y']) and ((sameTimeList[j]['data']['d'] == arcData[i]['d']) or (sameTimeList[j]['data']['d'] == 8)):
-                        chainData[sameTimeList[j]['index']]['postArc'] = True
-                        found = True
-                        break
-            else:
-                if chainData[chainData_index]['b'] > arcData[i]['b']:
-                    break   # If the note index is greater than arc time, then there was no pre
-
-                if chainData_index + 1 >= len(chainData):
-                    break
-                
-                chainData_index += 1
-
-            if found:
-                break
-
-        sameTimeList = []   # Reset list
-        found = False
-
-        while True: # Arc ending chain check
-            if chainData[chainData_index_t]['b'] == arcData[i]['tb']:
-                sameTimeList.append({'data': chainData[chainData_index_t], 'index': chainData_index_t})
-
-                if chainData_index_t + 1 < len(chainData):
-                    while chainData[chainData_index_t + 1]['b'] == arcData[i]['tb'] and chainData_index_t + 1 < len(chainData):
-                        chainData_index_t += 1
-                        sameTimeList.append({'data': chainData[chainData_index_t], 'index': chainData_index_t})
-                
-                for j in range(0, len(sameTimeList)):
-                    if (sameTimeList[j]['data']['x'] == arcData[i]['tx']) and (sameTimeList[j]['data']['y'] == arcData[i]['ty']) and ((sameTimeList[j]['data']['d'] == arcData[i]['tc']) or (sameTimeList[j]['data']['d'] == 8)):
-                        chainData[sameTimeList[j]['index']]['preArc'] = True
-                        found = True
-                        break
-            else:
-                if chainData[chainData_index_t]['b'] > arcData[i]['b']:
-                    break   # If the note index is greater than arc time, then there was no post
-                
-                if chainData_index_t + 1 >= len(chainData):
-                    break
-
-                chainData_index_t += 1
-
-            if found:
-                break
     return
 
-        
+def bindChainsToNotes(noteData, chainData):
+    noteData_index = 0
+
+    for i in range(0, len(noteData)):
+        noteData[i]['hasChain'] = False              # Initialize dict key
+
+    for i in range(0, len(chainData)):
+        # Index preparation while loops
+        while noteData[noteData_index]['b'] < chainData[i]['b'] and noteData_index + 1 < len(noteData):      # Increase index until right below correct note (time)
+            noteData_index += 1
+
+        sameTimeList = []   # Reset list
+        found = False
+
+        # Chain matcher while loops
+        while True: # Chain beginning note check
+            if noteData[noteData_index]['b'] == chainData[i]['b']:
+                sameTimeList.append({'data': noteData[noteData_index], 'index': noteData_index})
+
+                if noteData_index + 1 < len(noteData):
+                    if noteData[noteData_index + 1]['b'] == chainData[i]['b']:
+                        temp_index = noteData_index
+                        while noteData[noteData_index + 1]['b'] == chainData[i]['b'] and noteData_index + 1 < len(noteData):
+                            temp_index += 1
+                            sameTimeList.append({'data': noteData[temp_index], 'index': temp_index})
+                
+                for j in range(0, len(sameTimeList)):
+                    if (sameTimeList[j]['data']['x'] == chainData[i]['x']) and (sameTimeList[j]['data']['y'] == chainData[i]['y']) and ((sameTimeList[j]['data']['d'] == chainData[i]['d']) or (sameTimeList[j]['data']['d'] == 8)):
+                        noteData[sameTimeList[j]['index']]['chainData'] = chainData[i]
+                        noteData[sameTimeList[j]['index']]['hasChain'] = True
+                        found = True
+                        break
+            else:
+                if noteData[noteData_index]['b'] > chainData[i]['b']:
+                    break   # If the note index is greater than arc time, then there was no pre
+                
+                if noteData_index + 1 >= len(noteData):
+                    break
+
+                noteData_index += 1
             
-        
+            if found:
+                break
+
+    return
+
+
+
 
 # Base block calculations
 
+# Calculates the entry point of a swing given block position, block angle, and swing angle.
+def calculateSwingEntry(cBlockP: list, cBlockA, swingA = -1):
+    # Block good hitbox X = 0.8m, Y = 0.5m, Z = 1m
+    # Hitbox is Z = -0.15m offset from block position 
+    # Distance between 2 blocks on the X axis is 0.436m. /2 equals X middle point of the block hitbox.
+    # baseXPosition = 0.21818
+    
+    # Distance between 2 blocks on the Y axis is average 0.525m. /2 equals Y middle point of the block hitbox.
+    # baseYPosition = 0.2625
+    
+    middlePoint = [cBlockP[0] * xGridDistance + 0.21818, 
+                   cBlockP[1] * yGridDistance  + 0.2625]
+    
+    topPoint = [middlePoint[0] - math.cos(math.radians(cBlockA)) * 0.4, 
+                middlePoint[1] - math.sin(math.radians(cBlockA)) * 0.25]
+    
+    if swingA != -1:
+        xDistance = 0.4 * math.sin(math.radians(swingA - cBlockA))
+
+    swingPoint = [topPoint[0] + xDistance * math.sin(math.radians(cBlockA - 180)), 
+                  topPoint[1] - xDistance * math.cos(math.radians(cBlockA - 180))]
+
+    return swingPoint
 
 def primarySwings(objectData: dict, bombs: list, metadata: dict, handedness: int):    # handedness: 0 = left, 1 = right
     # Purpose of the function is to turn notes into swings. All notes, including those included in sliders will get their own swing.
@@ -390,23 +401,10 @@ def primarySwings(objectData: dict, bombs: list, metadata: dict, handedness: int
     offset = metadata['offset']
     
     note_index = 0
-    arc_index = 0
-    chain_index = 0
     bomb_index = 0
 
     next_note_beat = notes[0]['b']
-    next_arc_beat = arcs[0]['b']
-    next_chain_beat = chains[0]['b']
     next_bomb_beat = bombs[0]['b']
-
-    # # Collect all time data to track when events take place.
-    # timeData = [d.get('b') for d in notes]
-    # timeData += [d.get('b') for d in bombs]
-    # timeData += [d.get('b') for d in arcs]
-    # timeData += [d.get('tb') for d in arcs]
-    # timeData += [d.get('b') for d in chains]
-    # timeData += [d.get('tb') for d in chains]
-    # timeData = sorted(set(timeData))      # Remove duplicates and sort
 
     jumpDistance = calculateJD(bpm, njs, offset)
     lookAhead = distanceToBeats(bpm, njs, jumpDistance / 2)
@@ -423,82 +421,88 @@ def primarySwings(objectData: dict, bombs: list, metadata: dict, handedness: int
     # preAngleEnabled: if 100° pre swing angle is required (disabled for arcs)
     # postAngleEnabled: if 60° post swing angle is required (disabled for arcs)
     # freePoints: How many points were given for free (only applys for chain links)
-    # total points: Total points earnable from the swing
+    # totalPoints: Total points earnable from the swing
     
 
     swingData = []
 
-    bindArcsToNotes(notes, chains, arcs)
-
+    bindArcsToNotes(notes, arcs)        # Assigns pre/post angle required bool values to every note/chain
+    bindChainsToNotes(notes, chains)
 
     for i in range(0, len(notes)):
-        blockAngle = cut_direction_index[notes[i]['d']] + notes[i]['a']
-        hitboxStrikePos = calculateSwingEntry([notes[i]['x'], notes[i]['y']], blockAngle)
+        cNote = notes[i]
+
+        blockAngle = cut_direction_index[cNote['d']] + cNote['a']
+        hitboxStrikePos = calculateSwingEntry([cNote['x'], cNote['y']], blockAngle)
+        swingBeginning = cNote['b']
         
         # if i == 0:
         #     hitboxStrikePos = calculateSwingEntry([notes[i]['x'], notes[i]['y']], blockAngle)
         # else:
         #     temp = calculateSwingEntry([notes[i]['x'], notes[i]['y']], blockAngle)
         #     hitboxStrikePos = [(swingData[-2]['handPos'][0] + temp[0]) / 2, (swingData[-2]['handPos'][1] + temp[1]) / 2]
-        
-        
-        
+
+        if cNote['hasChain']:
+            distance = math.sqrt(math.pow((cNote['chainData']['x'] - cNote['chainData']['tx']), 2) + math.pow((cNote['chainData']['y'] - cNote['chainData']['ty']), 2))
+            chainStartPos = np.array([cNote['chainData']['x'], cNote['chainData']['y']])
+            chainEndPos = np.array([cNote['chainData']['tx'], cNote['chainData']['ty']])
+            midOffset = np.array([math.cos(math.radians(cut_direction_index[cNote['chainData']['d']])), math.sin(math.radians(cut_direction_index[cNote['chainData']['d']]))]) * distance / 2
+            midPoint = chainStartPos + midOffset
+            swingEnd = cNote['chainData']['tb']
+
+
+            duration = swingEnd - swingBeginning
+
+            linkPos = []
+            linkAngle = []
+
+            for j in range(1, cNote['chainData']['sc']):
+                timeProgress = j / (cNote['chainData']['sc'] - 1)
+
+                t = timeProgress * cNote['chainData']['s']
+
+                linkPos.append(PointOnQuadBezier(chainStartPos, midPoint, chainEndPos, t))  # Save block position on the grid for conversion
+                linkAngle.append(AngleOnQuadBezier(chainStartPos, midPoint, chainEndPos, t))
+                # Calculate block swing strike position in meters and save.
+                linkPos[-1] = calculateSwingEntry(linkPos[-1], linkAngle[-1])
+
+            notes[i]['chainData']['linkPos'] = linkPos
+            notes[i]['chainData']['linkAngle'] = linkAngle
+
+
+
+            freePoints = max(0, (cNote['chainData']['sc'] - 1) * 20)
+            totalPoints = 70 + freePoints
+            swingAngle = math.degrees(math.atan2(cNote['chainData']['ty'] - cNote['y'], cNote['chainData']['tx'] - cNote['x']))
+
+        else:
+            swingEnd = swingBeginning
+            freePoints = 0
+            totalPoints = 115
+            swingAngle = blockAngle
+
+
+
+
         swingData.append({})
-        swingData[-1]['beat'] = notes[i]['b']
+        swingData[-1]['beat'] = [swingBeginning, swingEnd]
         swingData[-1]['LRhand'] = handedness
         swingData[-1]['handPos'] = hitboxStrikePos
-        swingData[-1]['swingAngle'] = [0, blockAngle]
+        swingData[-1]['swingAngle'] = [0, swingAngle]
         swingData[-1]['noteAngle'] = blockAngle
         swingData[-1]['angleRequirement'] = 120
         swingData[-1]['swingAngleMargin'] = [60, 60]
-
-        if swingData[-1]['beat'] >= next_arc_beat:
-            if handedness == arcs[arc_index]['c']:
-                pass
-
-            arc_index += 1
-            next_arc_beat = arcs[arc_index]['b']
-
-
-
+        swingData[-1]['preAngleDisabled'] = cNote['preArc']
+        swingData[-1]['postAngleDisabled'] = cNote['postArc']
+        swingData[-1]['freePoints'] = freePoints
+        swingData[-1]['totalPoints'] = totalPoints
         
-
-        
-        
-
-    
-    next_arc_beat = arcs[arc_index]['b']
-    next_chain_beat = chains[chain_index]['b']
     next_bomb_beat = bombs[bomb_index]['b']
-
-
 
     return 0
 
 
-# Calculates the entry point of a swing given block position, block angle, and swing angle.
-def calculateSwingEntry(cBlockP: list, cBlockA, swingA = -1):
-    # Block good hitbox X = 0.8m, Y = 0.5m, Z = 1m
-    # Hitbox is Z = -0.15m offset from block position 
-    # Distance between 2 blocks on the X axis is 0.436m. /2 equals X middle point of the block hitbox.
-    # baseXPosition = 0.21818
-    
-    # Distance between 2 blocks on the Y axis is average 0.525m. /2 equals Y middle point of the block hitbox.
-    # baseYPosition = 0.2625
-    if swingA == -1:
-        swingA = cBlockA
-    
-    middlePoint = [cBlockP[0] * 0.43636 + 0.21818, 
-                   cBlockP[1] * 0.525  + 0.2625]
-    
-    topPoint = [middlePoint[0] - math.cos(math.radians(cBlockA)) * 0.4, 
-                middlePoint[0] - math.sin(math.radians(cBlockA)) * 0.25]
-    
-    xDistance = 0.4 * math.sin(math.radians(swingA - cBlockA))
-    swingPoint = [topPoint[0] + xDistance * math.sin(math.radians(cBlockA - 180)), 
-                  topPoint[1] - xDistance * math.cos(math.radians(cBlockA - 180))]
 
-    return swingPoint
 
 # Try to find if placement match for slider
 
