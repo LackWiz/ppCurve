@@ -20,6 +20,7 @@ right_handed_angle_strain_forehand = 247.5  # Most comfortable angle to aim for 
 left_handed_angle_strain_forehand = 292.5  # 270 + 45 or 292.5
 xGridDistance = 0.43636   # In meters
 yGridDistance = 0.525   # In meters, averaged 0.55m between bottom and middle row, 0.5m between middle and top row. This will also be scaled according to users height 
+bombCenterOffset = [[xGridDistance / 2 - 0.18, yGridDistance / 2 - 0.18], [xGridDistance / 2 + 0.18, yGridDistance / 2 + 0.18]]     #Bombs are roughly equal in size to note badcut hitboxes @ 0.36m
 # GLobal base functions
 
 def average(lst, setLen=0):  # Returns the averate of a list of integers
@@ -359,10 +360,6 @@ def bindChainsToNotes(noteData, chainData):
                 break
 
     return
-
-
-
-
 # Base block calculations
 
 # Calculates the entry point of a swing given block position, block angle, and swing angle.
@@ -383,45 +380,49 @@ def calculateSwingEntry(cBlockP: list, cBlockA, swingA = -1):
     
     if swingA != -1:
         xDistance = 0.4 * math.sin(math.radians(swingA - cBlockA))
+        xOffset = xDistance * math.sin(math.radians(cBlockA - 180))
+        yOffset = xDistance * math.cos(math.radians(cBlockA - 180))
+    else:
+        xOffset = 0
+        yOffset = 0
 
-    swingPoint = [topPoint[0] + xDistance * math.sin(math.radians(cBlockA - 180)), 
-                  topPoint[1] - xDistance * math.cos(math.radians(cBlockA - 180))]
+    swingPoint = [topPoint[0] + xOffset, 
+                  topPoint[1] - yOffset]
 
     return swingPoint
 
-def primarySwings(objectData: dict, bombs: list, metadata: dict, handedness: int):    # handedness: 0 = left, 1 = right
+def calculateBombHitbox(bPos: list):
+    hitboxX1 = bPos[0] * xGridDistance + bombCenterOffset[0][0]
+    hitboxY1 = bPos[1] * yGridDistance + bombCenterOffset[0][1]
+    hitboxX2 = bPos[0] * xGridDistance + bombCenterOffset[1][0]
+    hitboxY2 = bPos[1] * yGridDistance + bombCenterOffset[1][1]
+
+    hitboxPos = [[hitboxX1, hitboxY1], [hitboxX2, hitboxY2]]
+
+    return hitboxPos
+
+def primarySwings(objectData: dict, bombs: list, handedness: int):    # handedness: 0 = left, 1 = right
     # Purpose of the function is to turn notes into swings. All notes, including those included in sliders will get their own swing.
     # Later swing smoothing will combine individual swing data into a smooth swing path for calculation
 
     notes = objectData['notes']
     arcs = objectData['arcs']
     chains = objectData['chains']
-    njs = metadata['njs']
-    bpm = metadata['bpm']
-    offset = metadata['offset']
-    
-    note_index = 0
-    bomb_index = 0
 
-    next_note_beat = notes[0]['b']
-    next_bomb_beat = bombs[0]['b']
-
-    jumpDistance = calculateJD(bpm, njs, offset)
-    lookAhead = distanceToBeats(bpm, njs, jumpDistance / 2)
-
-    
-
-    # beat: The time of the swing
-    # LRhand: left or right hand
-    # handPos: [x, y]
-    # swingAngle: the angle of the swing [x, z]
-    # noteAngle: the angle of the note
-    # angleRequirement: angle strictness
-    # swingAngleMargin: available angle margin, list [margin counterclockwise, margin clockwise]
-    # preAngleEnabled: if 100° pre swing angle is required (disabled for arcs)
-    # postAngleEnabled: if 60° post swing angle is required (disabled for arcs)
-    # freePoints: How many points were given for free (only applys for chain links)
-    # totalPoints: Total points earnable from the swing
+    # Note data structure
+    # beat: float The time of the swing
+    # beatF: float The end of the swing
+    # isBomb: bool If the swing exists because of a bomb
+    # LRhand: bool Left or Right hand
+    # handPos: [float x, float y] Position of hand to swing
+    # swingAngle: float The angle of the swing [y, z]. y is yaw, z is roll. Saber travels in the path of the roll
+    # noteAngle: float The angle of the note
+    # angleRequirement: float Angle strictness
+    # swingAngleMargin: list [float margin counterclockwise, float margin clockwise] Available angle margin, 
+    # preAngleEnabled: bool If 100° pre swing angle is required (disabled for arcs)
+    # postAngleEnabled: bool If 60° post swing angle is required (disabled for arcs)
+    # freePoints: float How many points were given for free (only applys for chain links)
+    # totalPoints: float Total points earnable from the swing
     
 
     swingData = []
@@ -432,8 +433,8 @@ def primarySwings(objectData: dict, bombs: list, metadata: dict, handedness: int
     for i in range(0, len(notes)):
         cNote = notes[i]
 
-        blockAngle = cut_direction_index[cNote['d']] + cNote['a']
-        hitboxStrikePos = calculateSwingEntry([cNote['x'], cNote['y']], blockAngle)
+        blockAngle = cut_direction_index[cNote['d']] + cNote['a']       # Get block angle, including precision angle
+        hitboxStrikePos = calculateSwingEntry([cNote['x'], cNote['y']], blockAngle)     
         swingBeginning = cNote['b']
         
         # if i == 0:
@@ -449,9 +450,6 @@ def primarySwings(objectData: dict, bombs: list, metadata: dict, handedness: int
             midOffset = np.array([math.cos(math.radians(cut_direction_index[cNote['chainData']['d']])), math.sin(math.radians(cut_direction_index[cNote['chainData']['d']]))]) * distance / 2
             midPoint = chainStartPos + midOffset
             swingEnd = cNote['chainData']['tb']
-
-
-            duration = swingEnd - swingBeginning
 
             linkPos = []
             linkAngle = []
@@ -481,11 +479,10 @@ def primarySwings(objectData: dict, bombs: list, metadata: dict, handedness: int
             totalPoints = 115
             swingAngle = blockAngle
 
-
-
-
         swingData.append({})
-        swingData[-1]['beat'] = [swingBeginning, swingEnd]
+        swingData[-1]['beat'] = swingBeginning
+        swingData[-1]['beatF'] = swingEnd
+        swingData[-1]['isBomb'] = False
         swingData[-1]['LRhand'] = handedness
         swingData[-1]['handPos'] = hitboxStrikePos
         swingData[-1]['swingAngle'] = [0, swingAngle]
@@ -494,14 +491,56 @@ def primarySwings(objectData: dict, bombs: list, metadata: dict, handedness: int
         swingData[-1]['swingAngleMargin'] = [60, 60]
         swingData[-1]['preAngleDisabled'] = cNote['preArc']
         swingData[-1]['postAngleDisabled'] = cNote['postArc']
+        swingData[-1]['hasChain'] = cNote['hasChain']
         swingData[-1]['freePoints'] = freePoints
         swingData[-1]['totalPoints'] = totalPoints
+        if cNote['hasChain']:
+            swingData[-1]['chainData'] = {'linkPos': linkPos, 'linkAngle': linkAngle}
         
-    next_bomb_beat = bombs[bomb_index]['b']
+    for i in range(0, len(bombs)):
+        sameTime = []
+        sameTime.append(bombs[i])
 
-    return 0
+        # In many cases, there are many bombs on the same beat. Therefore we need to find the best/preferred saber swing position along with acceptable saber positions.
+        if i < len(bombs) - 1:
+            if(bombs[i]['b'] == bombs[i + 1]['b']):
+                while (bombs[i]['b'] == bombs[i + 1]['b']) and (i < len(bombs) + 1):
+                    sameTime.append(bombs[i])
+                    i += 1
+        
+        accumulatedX = 0
+        accumulatedY = 0
 
+        for j in range(0, len(sameTime)):
+            accumulatedX += (sameTime[j]['x'] - 1.5) * xGridDistance    # Set origin to the center of the grid for recommend swing angle calculations
+            accumulatedY += (sameTime[j]['y'] - 1) * yGridDistance    # Scaled to reflect differing scaling of the axis
 
+        averagedPosition = [accumulatedX / len(sameTime), accumulatedY / len(sameTime)]
+        recommendedSwingAngle = math.degrees(math.atan2(averagedPosition[1], averagedPosition[0]))
+        recommendedSwingAngle = mod(recommendedSwingAngle + 180, 360)   # Recommended swing angle should be *away* from the bombs.
+
+        swingData.append({})
+        swingData[-1]['beat'] = sameTime[0]['b']
+        swingData[-1]['isBomb'] = True
+        swingData[-1]['recommendedSA'] = recommendedSwingAngle
+
+        swingData[-1]['hitBoxList'] = []        # We will approximate bombs to be cubes instead of sphears for speed.
+        for j in range(0, len(sameTime)):
+            bombPos = [sameTime[j]['x'], sameTime[j]['x']]
+            swingData[-1]['hitBoxList'].append(calculateBombHitbox(bombPos))
+
+    swingData = sorted(swingData, key=lambda d: d['beat'])
+
+    return swingData
+
+def generateSwingPath(swingData, metaData):
+    njs = metadata['njs']
+    bpm = metadata['bpm']
+    offset = metadata['offset']
+    jumpDistance = calculateJD(bpm, njs, offset)
+    lookAhead = distanceToBeats(bpm, njs, jumpDistance / 2)
+
+    pass
 
 
 # Try to find if placement match for slider
@@ -536,8 +575,12 @@ def techOperations(mapData: dict, metadata: dict, isuser=True, verbose=True):
     RightMapData = splitMapData(mapData, 1)
     BombData = splitMapData(mapData, 2)
     WallData = splitMapData(mapData, 3)
-    LeftBaseSwingData = primarySwings(LeftMapData, BombData, metadata, 0)
-    RightBaseSwingData = primarySwings(RightMapData, BombData, metadata, 1)
+    LeftBaseSwingData = primarySwings(LeftMapData, BombData, 0)
+    RightBaseSwingData = primarySwings(RightMapData, BombData, 1)
+    LeftSwingPath = generateSwingPath(LeftBaseSwingData, metadata, 0)
+    RightSwingPath = generateSwingPath(RightBaseSwingData, metadata, 1)
+    
+
 
 
     LeftSwingData = []
