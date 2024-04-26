@@ -533,14 +533,51 @@ def primarySwings(objectData: dict, bombs: list, handedness: int):    # handedne
 
     return swingData
 
-def generateSwingPath(swingData, metaData):
+def generateSwingPath(swingData, metaData, handedness):
     njs = metadata['njs']
     bpm = metadata['bpm']
     offset = metadata['offset']
     jumpDistance = calculateJD(bpm, njs, offset)
     lookAhead = distanceToBeats(bpm, njs, jumpDistance / 2)
+    RT = lookAhead / bpm * 60
 
-    pass
+    # Setup numpy arrays for faster vector arithmatic.
+    if handedness == 0:                                             # X and Y coordinates in meters
+        hPos = np.array([1.5 * xGridDistance, 1.5 * yGridDistance])  # Left 
+    else:
+        hPos = np.array([2.5 * xGridDistance, 1.5 * yGridDistance])  # Right
+    hPosVel = np.array([0, 0])          # Positional velocity in m/s
+    hPosAcc = np.array([0, 0])          # Positional acceleration in m/s^2
+    
+    hAng = np.array([0, 0, 270])         # X (pitch), Y (yaw), and Z (roll) think of an airplane. Convention dictatates that palm down is the correct starting position
+    hAngVel = np.array([0, 0, 0])          # Angular velocity in degrees/sec
+    hAngAcc = np.array([0, 0, 0])          # Angular acceleration in degrees/sec^2
+    
+    duration = 0
+    
+    pTime = 0
+
+    timeBase = 0.010    #Seconds
+    timeEnd = swingData[-1]['beatF'] / bpm * 60     # Time of last swing in seconds
+
+    for i in range(0, len(swingData)):
+        cSwing = swingData[i]   # Cache indexed data used for referencing
+        
+        if i > 0:
+            duration = cSwing['beat'] - cSwing['beat']
+
+        if not cSwing['isBomb']:
+            bPos = np.array(cSwing['handPos'])
+            distance = bPos - hPos
+            timeSlice = duration / 10
+            
+            for s in range(0, 10):
+                
+
+
+
+
+                pass
 
 
 # Try to find if placement match for slider
@@ -563,12 +600,10 @@ def swingCurveCalc(swingData: list, leftOrRight, isuser=True):
         xvals.reverse()
         yvals.reverse()
 
-
 def combineAndSortList(array1, array2, key):
     combinedArray = array1 + array2
     combinedArray = sorted(combinedArray, key=lambda x: x[f'{key}'])  # once combined, sort by time
     return combinedArray
-
 
 def techOperations(mapData: dict, metadata: dict, isuser=True, verbose=True):
     LeftMapData = splitMapData(mapData, 0)
