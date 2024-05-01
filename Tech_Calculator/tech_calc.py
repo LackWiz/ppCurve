@@ -16,8 +16,6 @@ from collections import deque
 # Easy = 1, Normal = 3, Hard = 5, Expert = 7, Expert+ = 9
 # b = time, x and y = grid location from bottom left, a = angle offset, c = left or right respectively, d = direction
 cut_direction_index = [90, 270, 180, 0, 135, 45, 225, 315, 270]     # mathamatical 0°, direction of cut
-right_handed_angle_strain_forehand = 247.5  # Most comfortable angle to aim for right hand 270 - 45 or 247.5
-left_handed_angle_strain_forehand = 292.5  # 270 + 45 or 292.5
 xGridDistance = 0.43636   # In meters
 yGridDistance = 0.525   # In meters, averaged 0.55m between bottom and middle row, 0.5m between middle and top row. This will also be scaled according to users height 
 bombCenterOffset = [[xGridDistance / 2 - 0.18, yGridDistance / 2 - 0.18], [xGridDistance / 2 + 0.18, yGridDistance / 2 + 0.18]]     #Bombs are roughly equal in size to note badcut hitboxes @ 0.36m
@@ -46,6 +44,12 @@ def swapPositions(lis: list, pos1, pos2):
 def mod(x, m):
     return (x % m + m) % m
 
+# Based off unity mathf.lerp
+def lerp(p0, p1, t):
+    scale = p1 - p0
+    offset = p0
+    return offset + scale * t
+
 #Not the correct way to define function input type, but it'll help someone.
 def PointOnQuadBezier(p0: np.array, p1: np.array, p2: np.array, t):
     return (math.pow(1 - t, 2) * p0) + (2 * (1 - t) * t * p1) + (math.pow(t, 2) * p2)
@@ -60,6 +64,53 @@ def PointOnCubicBezier(p0: np.array, p1: np.array, p2: np.array, p3: np.array, t
 def AngleOnCubicBezier(p0: np.array, p1: np.array, p2: np.array, p3: np.array, t):
     derivative = list((3 * math.pow(1 - t, 2) * (p1 - p0)) + (6 * (1 - t) * t * (p2 - p1)) + (3 * math.pow(t, 2) * (p3 - p2)))      # Pretty sure can remove "list()" but will do later. Not important
     return mod(math.degrees(math.atan2(derivative[1], derivative[0])), 360)
+
+# Rotation around the x-axis (pitch)
+def rotate_x(point, center, theta):
+    x, y, z = point
+    cx, cy, cz = center
+    y -= cy
+    z -= cz
+    y_new = y * math.cos(theta) - z * math.sin(theta)
+    z_new = y * math.sin(theta) + z * math.cos(theta)
+    return (x, y_new + cy, z_new + cz)
+
+# Rotation around the y-axis (yaw)
+def rotate_y(point, center, theta):
+    x, y, z = point
+    cx, cy, cz = center
+    x -= cx
+    z -= cz
+    x_new = x * math.cos(theta) + z * math.sin(theta)
+    z_new = -x * math.sin(theta) + z * math.cos(theta)
+    return (x_new + cx, y, z_new + cz)
+
+# Rotation around the z-axis (roll)
+def rotate_z(point, center, theta):
+    x, y, z = point
+    cx, cy, cz = center
+    x -= cx
+    y -= cy
+    x_new = x * math.cos(theta) - y * math.sin(theta)
+    y_new = x * math.sin(theta) + y * math.cos(theta)
+    return (x_new + cx, y_new + cy, z)
+
+# Perform rotations
+def rotateHitbox(p0, p1, center, pitch, yaw, roll):
+    pitch = np.deg2rad(pitch)
+    yaw = np.deg2rad(yaw)
+    roll = np.deg2rad(roll)
+
+    new_p0 = rotate_x(p0, center, pitch)
+    new_p1 = rotate_x(p1, center, pitch)
+
+    new_p0 = rotate_y(new_p0, center, -yaw)
+    new_p1 = rotate_y(new_p1, center, -yaw)
+
+    new_p0 = rotate_z(new_p0, center, roll)
+    new_p1 = rotate_z(new_p1, center, roll)
+
+    return new_p0, new_p1
 
 # Map preparation functions
 
@@ -359,7 +410,7 @@ def bindChainsToNotes(noteData, chainData):
 # Base block calculations
 
 # Calculates the entry point of a swing given block position, block angle, and swing angle.
-def calculateSwingEntry(cBlockP, cBlockA, swingA = -1):
+def calcBlockPosData(cBlockP, cBlockA, swingA = -1):
     # Block good hitbox X = 0.8m, Y = 0.5m, Z = 1m
     # Hitbox is Z = -0.15m offset from block position 
     # Distance between 2 blocks on the X axis is 0.436m. /2 equals X middle point of the block hitbox.
@@ -367,11 +418,42 @@ def calculateSwingEntry(cBlockP, cBlockA, swingA = -1):
     
     # Distance between 2 blocks on the Y axis is average 0.525m. /2 equals Y middle point of the block hitbox.
     # baseYPosition = 0.2625
+
     
-    middlePoint = [cBlockP[0] * xGridDistance + 0.21818, 
-                   cBlockP[1] * yGridDistance  + 0.2625]
+    hitbox = {'p0': {}, 'p1': {}}
+    strikePos = []
+    noteAngle = []
+
+    xNoteCenter = (cBlockP[0] + 0.5 - 2) * xGridDistance
+    r0 = np.sqrt(0.4**2 + 0.85**2)      # Hypotinuse between block and any forwards 4 corners of the hitbox
+    r1 = np.sqrt(2) * 0.15              # Same but on the back
+    r2 = np.sqrt(0.4**2 + 0.25**2)      # Front center to front corner
+    thetaY = np.rad2deg(np.arctan2(0.4, 0.85))
+    thetaZ = np.rad2deg(np.arctan2(0.25, 0.4))
+
+    xAng = 0
+    yAng = np.arccos(xNoteCenter / 1.85)    # 1.85 = 1 meter saber length + 0.85 forward z hitbox. 0° is straight forwards, + angle is CC, - angle is clockwise.
+    zAng = cBlockA
+    angle = {'x': xAng, 'y': yAng, 'z': zAng}
+
+    p0 = np.array([0, 0, 0])
+    p1 = np.array([0.8, 0.5, 1.0])
+    center = np.array([0.4, 0.25, 0.85])
+
+    rotated_p0, rotated_p1 = rotateHitbox(p0, p1, center, xAng, yAng, zAng)
     
-    topPoint = [middlePoint[0] + math.cos(math.radians(cBlockA - 180)) * 0.4, 
+    x0Pos = cBlockP[0] * xGridDistance + rotated_p0[0]
+    x1Pos = cBlockP[0] * xGridDistance + rotated_p1[0]
+    y0Pos = cBlockP[1] * yGridDistance + rotated_p0[1]
+    y1Pos = cBlockP[1] * yGridDistance + rotated_p1[1]
+    z0Pos = rotated_p0[2]
+    z1Pos = rotated_p1[2]
+    hitbox['p0'] = {'x': x0Pos, 'y': y0Pos, 'z': z0Pos}
+    hitbox['p1'] = {'x': x1Pos, 'y': y1Pos, 'z': z1Pos}
+    
+    strikePos = []
+    
+    topMiddlePoint = [middlePoint[0] + math.cos(math.radians(cBlockA - 180)) * 0.4, 
                 middlePoint[1] + math.sin(math.radians(cBlockA - 180)) * 0.25]
     
     if swingA != -1:
@@ -382,10 +464,13 @@ def calculateSwingEntry(cBlockP, cBlockA, swingA = -1):
         xOffset = 0
         yOffset = 0
 
-    swingPoint = [topPoint[0] + xOffset, 
+    swingPointPos = [topPoint[0] + xOffset, 
                   topPoint[1] - yOffset]
 
-    return swingPoint
+    
+    blockData = {'hitbox' : hitbox, 'strikePos': strikePos, 'angle': angle}
+
+    return blockData
 
 def calculateBombHitbox(bPos: list):
     hitboxX1 = bPos[0] * xGridDistance + bombCenterOffset[0][0]
@@ -397,6 +482,26 @@ def calculateBombHitbox(bPos: list):
 
     return hitboxPos
 
+def calculateHitbox(objectData, handedness = -1):     # 0 = left, 1 - right
+    match handedness:
+        case 0:
+            pass
+        case 1:
+            pass
+        case 2:
+            pass
+
+def caltulateStrikeData(objectData):
+    pass
+
+
+
+
+
+
+
+
+
 def primarySwings(objectData: dict, bombs: list, handedness: int):    # handedness: 0 = left, 1 = right
     # Purpose of the function is to turn notes into swings. All notes, including those included in sliders will get their own swing.
     # Later swing smoothing will combine individual swing data into a smooth swing path for calculation
@@ -405,10 +510,11 @@ def primarySwings(objectData: dict, bombs: list, handedness: int):    # handedne
     arcs = objectData['arcs']
     chains = objectData['chains']
 
-    # Note data structure
+    # Swing data structure
     # beat: float The time of the swing
     # beatF: float The end of the swing
     # isBomb: bool If the swing exists because of a bomb
+    # isDot: bool If the note is a dot note
     # LRhand: bool Left or Right hand
     # handPos: [float x, float y] Position of hand to swing
     # swingAngle: float The angle of the swing [y, z]. y is yaw, z is roll. Saber travels in the path of the roll
@@ -428,9 +534,12 @@ def primarySwings(objectData: dict, bombs: list, handedness: int):    # handedne
 
     for i in range(0, len(notes)):
         cNote = notes[i]
-
+        isDot = False
         blockAngle = cut_direction_index[cNote['d']] + cNote['a']       # Get block angle, including precision angle
-        hitboxStrikePos = calculateSwingEntry([cNote['x'], cNote['y']], blockAngle)     
+        if cNote['d'] == 8:
+            isDot = True
+            
+        hitboxStrikePos = calcBlockPosData([cNote['x'], cNote['y']], blockAngle)     
         swingBeginning = cNote['b']
         
         # if i == 0:
@@ -458,7 +567,7 @@ def primarySwings(objectData: dict, bombs: list, handedness: int):    # handedne
                 linkPos.append(PointOnQuadBezier(chainStartPos, midPoint, chainEndPos, t))  # Save block position on the grid for conversion
                 linkAngle.append(AngleOnQuadBezier(chainStartPos, midPoint, chainEndPos, t))
                 # Calculate block swing strike position in meters and save.
-                linkPos[-1] = calculateSwingEntry(linkPos[-1], linkAngle[-1])
+                linkPos[-1] = calcBlockPosData(linkPos[-1], linkAngle[-1])
 
             notes[i]['chainData']['linkPos'] = linkPos
             notes[i]['chainData']['linkAngle'] = linkAngle
@@ -466,7 +575,7 @@ def primarySwings(objectData: dict, bombs: list, handedness: int):    # handedne
 
 
             freePoints = max(0, (cNote['chainData']['sc'] - 1) * 20)
-            totalPoints = 70 + freePoints
+            totalPoints = 80 + freePoints
             swingAngle = math.degrees(math.atan2(cNote['chainData']['ty'] - cNote['y'], cNote['chainData']['tx'] - cNote['x']))
 
         else:
@@ -479,6 +588,7 @@ def primarySwings(objectData: dict, bombs: list, handedness: int):    # handedne
         swingData[-1]['beat'] = swingBeginning
         swingData[-1]['beatF'] = swingEnd
         swingData[-1]['isBomb'] = False
+        swingData[-1]['isDot'] = isDot
         swingData[-1]['LRhand'] = handedness
         swingData[-1]['handPos'] = hitboxStrikePos
         swingData[-1]['swingAngle'] = [0, swingAngle]
@@ -529,21 +639,14 @@ def primarySwings(objectData: dict, bombs: list, handedness: int):    # handedne
 
     return swingData
 
-def primarySwingPath(swingData, metaData, handedness):
-    njs = metaData['njs']
-    bpm = metaData['bpm']
-    offset = metaData['offset']
-    jumpDistance = calculateJD(bpm, njs, offset)
-    lookAhead = distanceToBeats(bpm, njs, jumpDistance / 2)
-    RT = lookAhead / bpm * 60
+def primarySwingPath(swingData, handedness):
+    
 
     # Setup numpy arrays for faster vector arithmatic.
     if handedness == 0:                                                 # X and Y coordinates in meters
         hPos = np.array([1.5 * xGridDistance, 1.5 * yGridDistance])     # Left 
     else:
         hPos = np.array([2.5 * xGridDistance, 1.5 * yGridDistance])     # Right
-    hPosVel = np.array([0, 0])          # Positional velocity in m/s
-    # hPosAcc = np.array([0, 0])          # Positional acceleration in m/s^2
     
     # hAng = np.array([0, 0, 270])         # X (pitch), Y (yaw), and Z (roll) think of an airplane. Convention dictatates that palm down is the correct starting position
     # hAngVel = np.array([0, 0, 0])          # Angular velocity in degrees/sec
@@ -551,94 +654,103 @@ def primarySwingPath(swingData, metaData, handedness):
     
     duration = swingData[0]['beat']
 
-    pathData = [{'swingData': {}, 'path': {'pos': [], 'posVel': [], 'posAccel': [], 'ang': [], 'angVel': [], 'angAccel': []}}]
+    pathData = [{'swingDataIndex': 0, 'path': {'pos': [], 'posVel': [], 'posAccel': [], 'ang': [], 'angVel': [], 'angAccel': []}}]
 
     for i in range(0, len(swingData)):
         cSwing = swingData[i]   # Cache indexed data used for referencing
         
         if i > 0:
-            duration = cSwing['beat'] - swingData[i - 1]['beat']
-            hPos = pathData[-1]['path']['pos'][-1]
-            hPosVel = pathData[-1]['path']['posVel'][-1]
-            # hPosAcc = pathData[-1]['path']['posAccel'][-1]
+            hPos = pathData[-1]['path']['pos'][-1]    
             # hAng = pathData[-1]['path']['ang'][-1]
-            pathData.append({'swingData': {}, 'path': {'pos': [], 'posVel': [], 'posAccel': [], 'ang': [], 'angVel': [], 'angAccel': []}})
-
+            
+        pathData.append({'swingDataIndex': i, 'path': {'pos': [], 'posVel': [], 'posAccel': [], 'ang': [], 'angVel': [], 'angAccel': []}})
         if not cSwing['isBomb']:
-            if cSwing['hasChain']:
-                chainList = cSwing['chainData']
-                resolution = 8
-            else:
-                resolution = 8
-                bPos = np.array(cSwing['handPos'])
-                distance = bPos - hPos
-
+            resolution = 20                         # Minimum 10 points to get useful data
+            bPos = np.array(cSwing['handPos'])
+            distance = bPos - hPos
             
 
+            p0 = hPos  # Curve ending
+            p3 = hPos + distance    # Curve ending
 
-                    # Minimum 10 points to get useful data
-            
-            timeSlice = duration / resolution / bpm * 60
-
-            # hPosAcc = (2 * distance - 2 * hPosVel * duration) / (math.pow(duration, 2))
-
-            p0 = hPos  # Curve Beginning
-            
-            # p3Offset = (np.cos(distance * np.pi / 1.5 + np.pi) + 1) / 4       # Optimal hand position based on distance between handPos and blockPos
-            # if distance[0] < 0:                                         # https://www.desmos.com/calculator/g2belgtjqt
-            #     p3Offset[0] *= -1
-            # if distance[1] < 0:
-            #     p3Offset[1] *= -1
-
-            p3Offset = distance
-            p3 = hPos + p3Offset
-
-            # p1Offset = np.linalg.norm(hPosVel) * distance / 2
             p2Offset = np.array([np.cos(np.deg2rad(mod(cSwing['noteAngle'] - 180, 360))), np.sin(np.deg2rad(mod(cSwing['noteAngle'] - 180, 360)))]) / 4
             p2 = p3 + p2Offset
+            p1Offset = np.array([np.cos(np.deg2rad(mod(cSwing['noteAngle'], 360))), np.sin(np.deg2rad(mod(cSwing['noteAngle'], 360)))]) / 4
+            p1 = hPos + p1Offset
 
-            # hPosVel = hPosVel + np.random.default_rng().random() * 0.00001  # To avoid divide by 0 errors
-            if np.min(np.minimum(hPosVel, 0)) == 0 and np.max(np.maximum(hPosVel, 0)) == 0:            # This is cleaner
-                p1 = hPos
-            else:
-                p1 = hPos + hPosVel * np.linalg.norm(distance) / np.linalg.norm(hPosVel)
-
+            
             for j in range(0, resolution + 1):  # Calculating path after last block to current block.
                 timeProgress = j / (resolution)
                 pathData[-1]['path']['pos'].append(PointOnCubicBezier(p0, p1, p2, p3, timeProgress))  # Save block position on the grid for conversion
-                
-                if j > 0:
-                    pathData[-1]['path']['posVel'].append((pathData[-1]['path']['pos'][-1] - pathData[-1]['path']['pos'][-2]) / timeSlice)
-                else:
-                    pathData[-1]['path']['posVel'].append(np.array([0,0]))
 
-                if j > 0:
-                    pathData[-1]['path']['posAccel'].append((pathData[-1]['path']['posVel'][-1] - pathData[-1]['path']['posVel'][-2]) / timeSlice)
-                else:
-                    pathData[-1]['path']['posAccel'].append(np.array([0,0]))
+            if cSwing['hasChain']:      # Deal with chain links
+                chainList = cSwing['chainData']
+                resolution = 4
 
-            # from matplotlib import pyplot as plt        #   Test
-            # fig, ax = plt.subplots(figsize = (15, 8))
-            # xvals = [x[0] for x in pathData[-1]['path']['pos']]
-            # yvals = [x[1] for x in pathData[-1]['path']['pos']]
-            # ax.plot(xvals, yvals, label='curve path')
-            # xpoints = [p[0] for p in [p0, p1, p2, p3]]
-            # ypoints = [p[1] for p in [p0, p1, p2, p3]]
-            # ax.plot(xvals, yvals, label='curve path')
-            # ax.plot(xpoints, ypoints, "ro")
-            # pName = ['p0','p1','p2','p3']
-            # for p, txt in enumerate(pName):
-            #     ax.annotate(txt, (xpoints[p], ypoints[p]))
-            # ax.set_xticks(np.linspace(0,xGridDistance * 4,5))
-            # ax.set_yticks(np.linspace(0,yGridDistance * 3,4))
-            # #plt.xlim(0,1.3333333)
-            # #plt.ylim(0,1)
-            # plt.legend()
-            # plt.show()
+                for j in range(0, len(chainList)):
+                    p0 = pathData[-1]['path']['pos'][-1]
+
+
+
+            from matplotlib import pyplot as plt        #   Test
+            fig, ax = plt.subplots(figsize = (15, 8))
+            xvals = [x[0] for x in pathData[-1]['path']['pos']]
+            yvals = [x[1] for x in pathData[-1]['path']['pos']]
+            ax.plot(xvals, yvals, label='curve path')
+            xpoints = [p[0] for p in [p0, p1, p2, p3]]
+            ypoints = [p[1] for p in [p0, p1, p2, p3]]
+            ax.plot(xvals, yvals, label='curve path')
+            ax.plot(xpoints, ypoints, "ro")
+            pName = ['p0','p1','p2','p3']
+            for p, txt in enumerate(pName):
+                ax.annotate(txt, (xpoints[p], ypoints[p]))
+            ax.set_xticks(np.linspace(0,xGridDistance * 4,5))
+            ax.set_yticks(np.linspace(0,yGridDistance * 3,4))
+            #plt.xlim(0,1.3333333)
+            #plt.ylim(0,1)
+            plt.legend()
+            plt.show()
 
         else:       # Bombs
             pass
         
+
+def swingPathSmoothing(pathData, metaData):
+    
+    # Code for later
+    njs = metaData['njs']
+    bpm = metaData['bpm']
+    offset = metaData['offset']
+    jumpDistance = calculateJD(bpm, njs, offset)
+    lookAhead = distanceToBeats(bpm, njs, jumpDistance / 2)
+    RT = lookAhead / bpm * 60
+
+    hPosVel = np.array([0, 0])          # Positional velocity in m/s
+    hPosAcc = np.array([0, 0])          # Positional acceleration in m/s^2
+
+    resolution = 20                         # Minimum 10 points to get useful data
+    bPos = np.array(cSwing['handPos'])
+    distance = bPos - hPos
+    duration = cSwing['beat'] - swingData[i - 1]['beat']
+    timeSlice = duration / resolution / bpm * 60
+
+
+    hPosVel = pathData[-1]['path']['posVel'][-1]
+
+    if np.min(np.minimum(hPosVel, 0)) == 0 and np.max(np.maximum(hPosVel, 0)) == 0:            # This is cleaner
+        p1 = hPos + p1Offset
+    else:
+        p1 = hPos + hPosVel * np.minimum(np.linalg.norm(hPosVel), np.linalg.norm(distance) / np.linalg.norm(hPosVel))     
+
+    if j > 0:
+        pathData[-1]['path']['posVel'].append((pathData[-1]['path']['pos'][-1] - pathData[-1]['path']['pos'][-2]) / timeSlice)
+    else:
+        pathData[-1]['path']['posVel'].append(np.array([0,0]))
+
+    if j > 0:
+        pathData[-1]['path']['posAccel'].append((pathData[-1]['path']['posVel'][-1] - pathData[-1]['path']['posVel'][-2]) / timeSlice)
+    else:
+        pathData[-1]['path']['posAccel'].append(np.array([0,0]))
             
 
 # Try to find if placement match for slider
