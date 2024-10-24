@@ -63,8 +63,9 @@ def findSongPath(song_id: str, isuser=True): # Returns the song folder path by s
 
     if isuser:
         bsPath = load_BSPath()
-        bsPath = os.path.join(bsPath, "Beat Saber_Data")
-        bsPath = os.path.join(bsPath, "CustomLevels")
+        # bsPath = os.path.join(bsPath, "Beat Saber_Data")
+        # bsPath = os.path.join(bsPath, "CustomLevels")
+        
         # Creating the full path as we may not actually be within a
         # Beat Saber install (I'm running this from within a VM.)
         os.makedirs(bsPath, exist_ok=True)
@@ -106,11 +107,13 @@ def load_json_as_dict(path: str):    # Reads, then loads and returns JSON as a d
     return dat
 def findStandardCharacteristicIndex(infoDat: str, characteristicName: str):
     for f in range(0, len(infoDat["_difficultyBeatmapSets"])):
-        if infoDat["_difficultyBeatmapSets"][f]['_beatmapCharacteristicName'] == characteristicName:
+        if infoDat["_difficultyBeatmapSets"][f]['_beatmapCharacteristicName'].lower() == characteristicName.lower():
             return f
-def findStandardDiffs(songPath: str):    # Returns a list of all avilable song difficulties from the info.dat file by difficulty number
+#   Returns a list of all avilable song difficulties from the info.dat file by difficulty number.     
+#   Valid Characteristic names include 'Standard', 'OneSaber', "90Degree", etc
+def findDiffs(songPath: str, characteristic: str = 'Standard'):    # 
     infoDat = load_json_as_dict(findInfoFile(songPath)) #Load infoDat file for convience
-    characteristicIndex = findStandardCharacteristicIndex(infoDat, "Standard")  
+    characteristicIndex = findStandardCharacteristicIndex(infoDat, characteristic) 
     difflist = []
     for f in range(0, len(infoDat["_difficultyBeatmapSets"][characteristicIndex]["_difficultyBeatmaps"])):
         difflist.append(infoDat["_difficultyBeatmapSets"][characteristicIndex]["_difficultyBeatmaps"][f]["_difficultyRank"]) #Store all avilable difficulties
@@ -153,9 +156,9 @@ def loadInfoData(mapID: str, isuser=True):
     infoPath = findInfoFile(songPath)
     infoData = load_json_as_dict(infoPath)
     return infoData
-def loadMapData(mapID: str, diffNum: int, isuser=True):
+def loadMapData(mapID: str, diffNum: int, isuser=True, characteristic='Standard'):
     songPath = findSongPath(mapID, isuser)
-    diffList = findStandardDiffs(songPath)
+    diffList = findDiffs(songPath, characteristic)
     if diffNum in diffList:     # Check if the song is listed in the Info.dat file, otherwise exits programs
         diffPath = diffNum_to_diffPath(songPath, diffNum)
         mapData = load_json_as_dict(diffPath)

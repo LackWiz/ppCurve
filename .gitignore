@@ -9,3 +9,4 @@ _TestFiles/
 _songCache/
 *.rar
 deviationResults/deviation.json
+.vscode/
