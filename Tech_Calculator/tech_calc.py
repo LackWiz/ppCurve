@@ -18,7 +18,8 @@ from collections import deque
 cut_direction_index = [90, 270, 180, 0, 135, 45, 225, 315, 270]     # mathamatical 0°, direction of cut
 xGridDistance = 0.43636   # In meters
 yGridDistance = 0.525   # In meters, averaged 0.55m between bottom and middle row, 0.5m between middle and top row. This will also be scaled according to users height 
-bombCenterOffset = [[xGridDistance / 2 - 0.18, yGridDistance / 2 - 0.18], [xGridDistance / 2 + 0.18, yGridDistance / 2 + 0.18]]     #Bombs are roughly equal in size to note badcut hitboxes @ 0.36m
+#Bombs are roughly equal in size to note badcut hitboxes @ 0.36m
+bombCenterOffset = [[xGridDistance / 2 - 0.18, yGridDistance / 2 - 0.18, 1 - 0.18], [xGridDistance / 2 + 0.18, yGridDistance / 2 + 0.18, 1 + 0.18]]     
 saberHitDistance = 0.5        # The z position where the hitbox will hit the saber. 0 = hilting, 0.5 = best for consistancy, 1 = tipping
 
 
@@ -432,12 +433,12 @@ def calcBlockPosData(cBlockP, cBlockA, swingA = -1):
     zAng = cBlockA
 
     # Initialize point positions for hitbox caluclations
-    p0 = np.array([0, 0, 0])       
-    p1 = np.array([0.8, 0.5, 1.0])
-    center = np.array([0.4, 0.25, 0.85])
+    p0 = np.array([0, 0, 0.15])       
+    p1 = np.array([0.8, 0.5, 1.15])
+    center = np.array([0.4, 0.25, 1])
     
     #0.4 = (x) middle of width of hitbox, (y) 0.5 = top of hitbox, (z) length of hitbox
-    initStrikePos = [0.4, 0.5, 1.0 - saberHitDistance]    # Initializa strike position.
+    initStrikePos = [0.4, 0.5, p0[2] + saberHitDistance]    # Initializa strike position.
     
     if swingA != -1:
         xDistance = 0.4 * math.sin(math.radians(swingA - cBlockA))
@@ -477,11 +478,12 @@ def calcBlockPosData(cBlockP, cBlockA, swingA = -1):
 def calculateBombHitbox(bPos: list):
     hitboxX1 = bPos[0] * xGridDistance + bombCenterOffset[0][0]
     hitboxY1 = bPos[1] * yGridDistance + bombCenterOffset[0][1]
+    hitboxZ1 = bombCenterOffset[0][2]
     hitboxX2 = bPos[0] * xGridDistance + bombCenterOffset[1][0]
     hitboxY2 = bPos[1] * yGridDistance + bombCenterOffset[1][1]
+    hitboxZ2 = bombCenterOffset[1][2]
 
-    hitboxPos = [[hitboxX1, hitboxY1], [hitboxX2, hitboxY2]]
-
+    hitboxPos = [[hitboxX1, hitboxY1, hitboxZ1], [hitboxX2, hitboxY2, hitboxZ2]]
     return hitboxPos
 
 def caltulateStrikeData(objectData):
@@ -585,7 +587,7 @@ def createNoteList(objectData: dict, handedness: int):    # handedness: 0 = left
 
     return swingData
 
-def createBombList(bombs: list, handedness: int):
+def createBombList(bombs: list):
     bombData = []
     i = 0
     while i < len(bombs):
@@ -623,8 +625,36 @@ def createBombList(bombs: list, handedness: int):
         i += 1
     return bombData
 
-def applyLaneRotation(objectData):
-    pass
+def applyRotationData(objectData, rotationData=[]):
+    if len(rotationData) == 0:
+        return objectData
+    
+    rotation = 0
+    rotationIndex = 0
+    
+    for i in range(0, len(objectData)):
+        InclusiveFlag = True
+        if rotationIndex + 1 < len(rotationData):           # Check if next index is available to check
+            if rotationData[rotationIndex + 1]['e'] == 0:   # Check if the next rotation event is inclusive or exclusive (if it includes or excludes the notes on beat)
+                InclusiveFlag = True                        #Easily optimizable, but trying to make as readable as possible
+            else:
+                InclusiveFlag = False
+        
+        if InclusiveFlag:
+            if objectData[i]['beat'] >= rotationData[rotationIndex]['b']:
+                rotation += rotationData[rotationIndex]
+                rotationIndex += 1
+        else:
+            if objectData[i]['beat'] > rotationData[rotationIndex]['b']:
+                rotation += rotationData[rotationIndex]
+                rotationIndex += 1
+
+        p0 = np.array([objectData[i]['hitboxData']['hitbox']['p0']['x'],objectData[i]['hitboxData']['hitbox']['p0']['y'],objectData[i]['hitboxData']['hitbox']['p0']['z']])
+        p1 = np.array([objectData[i]['hitboxData']['hitbox']['p1']['x'],objectData[i]['hitboxData']['hitbox']['p1']['y'],objectData[i]['hitboxData']['hitbox']['p1']['z']])
+        center = np.array(0,0,0)
+        objectData[i]['hitboxData']['hitbox']['p0'] = rotatePoint(p0, center, 0, rotation, 0)
+        objectData[i]['hitboxData']['hitbox']['p1'] = rotatePoint(p1, center, 0, rotation, 0)
+    
 
 
 
@@ -753,15 +783,18 @@ def combineAndSortList(array1, array2, key):
     combinedArray = sorted(combinedArray, key=lambda x: x[f'{key}'])  # once combined, sort by time
     return combinedArray
 
-def techOperations(mapData: dict, metadata: dict, isuser=True, verbose=True):
-    LeftMapData = splitMapData(mapData, 0)
-    RightMapData = splitMapData(mapData, 1)
-    BombData = splitMapData(mapData, 2)
-    WallData = splitMapData(mapData, 3)
-    LeftBaseNoteData = createNoteList(LeftMapData, 0)
-    RightBaseNoteData = createNoteList(RightMapData, 1)
-    LeftBaseBombData = createBombList(BombData, 0)
-    RightBaseBombData = createBombList(BombData, 1)
+def techOperations(B_mapData: dict, metadata: dict, isuser=True, verbose=True):
+    B_LeftNoteData = splitMapData(B_mapData, 0)
+    B_RightNoteData = splitMapData(B_mapData, 1)
+    B_BombData = splitMapData(B_mapData, 2)
+    B_WallData = splitMapData(B_mapData, 3)
+    LeftBaseNoteData = createNoteList(B_LeftNoteData, 0)
+    RightBaseNoteData = createNoteList(B_RightNoteData, 1)
+    BombData = createBombList(B_BombData)
+    if len(B_mapData['rotationEvents']) > 0:
+        LeftBaseNoteData = applyRotationData(LeftBaseNoteData, B_mapData['rotationEvents'])
+        RightBaseNoteData = applyRotationData(RightBaseNoteData, B_mapData['rotationEvents'])
+        BombData = applyRotationData(BombData, B_mapData['rotationEvents'])
 
     LeftSwingPath = primarySwingPath(LeftBaseNoteData, 0)
     RightSwingPath = primarySwingPath(RightBaseNoteData, 1)

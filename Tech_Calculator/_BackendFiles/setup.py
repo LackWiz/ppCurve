@@ -118,19 +118,47 @@ def findDiffs(songPath: str, characteristic: str = 'Standard'):    #
     for f in range(0, len(infoDat["_difficultyBeatmapSets"][characteristicIndex]["_difficultyBeatmaps"])):
         difflist.append(infoDat["_difficultyBeatmapSets"][characteristicIndex]["_difficultyBeatmaps"][f]["_difficultyRank"]) #Store all avilable difficulties
     return difflist
-def diffNum_to_diffPath(songPath: str, diffNum: int):     #Returns the File Path of whichever difficulty under test based on the difficulty Number
+def diffNum_to_diffPath(songPath: str, diffNum: int, characteristic='Standard'):     #Returns the File Path of whichever difficulty under test based on the difficulty Number
     files = os.listdir(songPath)
-    match diffNum:
-        case 9:
-            fileName = files[findMatchingDiffIndex(files, ['expertplus', 'expertplusstandard'])]
-        case 7:
-            fileName = files[findMatchingDiffIndex(files, ['expert', 'expertstandard'])]
-        case 5:
-            fileName = files[findMatchingDiffIndex(files, ['hard', 'hardstandard'])]
-        case 3:
-            fileName = files[findMatchingDiffIndex(files, ['normal', 'normalstandard'])]
-        case 1:
-            fileName = files[findMatchingDiffIndex(files, ['easy', 'easystandard'])]
+    fileName = False
+    if characteristic.lower() == 'standard':
+        match diffNum:
+            case 9:
+                fileName = files[findMatchingDiffIndex(files, ['expertplus', 'expertplusstandard'])]
+            case 7:
+                fileName = files[findMatchingDiffIndex(files, ['expert', 'expertstandard'])]
+            case 5:
+                fileName = files[findMatchingDiffIndex(files, ['hard', 'hardstandard'])]
+            case 3:
+                fileName = files[findMatchingDiffIndex(files, ['normal', 'normalstandard'])]
+            case 1:
+                fileName = files[findMatchingDiffIndex(files, ['easy', 'easystandard'])]
+    elif characteristic.lower() == 'onesaber':
+        match diffNum:
+            case 9:
+                fileName = files[findMatchingDiffIndex(files, ['expertplusonesaber'])]
+            case 7:
+                fileName = files[findMatchingDiffIndex(files, ['expertonesaber'])]
+            case 5:
+                fileName = files[findMatchingDiffIndex(files, ['hardonesaber'])]
+            case 3:
+                fileName = files[findMatchingDiffIndex(files, ['normalonesaber'])]
+            case 1:
+                fileName = files[findMatchingDiffIndex(files, ['easyonesaber'])]
+    elif characteristic.lower() == '90degree':
+        match diffNum:
+            case 9:
+                fileName = files[findMatchingDiffIndex(files, ['expertplus90degree'])]
+            case 7:
+                fileName = files[findMatchingDiffIndex(files, ['expert90degree'])]
+            case 5:
+                fileName = files[findMatchingDiffIndex(files, ['hard90degree'])]
+            case 3:
+                fileName = files[findMatchingDiffIndex(files, ['normal90degree'])]
+            case 1:
+                fileName = files[findMatchingDiffIndex(files, ['easy90degree'])]
+    # else:
+    #     return False
     if fileName == False:
         return False
     return f"{songPath}/{fileName}"
@@ -160,7 +188,7 @@ def loadMapData(mapID: str, diffNum: int, isuser=True, characteristic='Standard'
     songPath = findSongPath(mapID, isuser)
     diffList = findDiffs(songPath, characteristic)
     if diffNum in diffList:     # Check if the song is listed in the Info.dat file, otherwise exits programs
-        diffPath = diffNum_to_diffPath(songPath, diffNum)
+        diffPath = diffNum_to_diffPath(songPath, diffNum, characteristic)
         mapData = load_json_as_dict(diffPath)
         return mapData
     else:
