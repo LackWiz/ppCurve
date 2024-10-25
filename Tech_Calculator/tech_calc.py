@@ -465,11 +465,15 @@ def calcBlockPosData(cBlockP, cBlockA, swingA = -1):
     z1Pos = rotated_p1[2]
 
     #Save data
-    hitbox['p0'] = {'x': x0Pos, 'y': y0Pos, 'z': z0Pos}
-    hitbox['p1'] = {'x': x1Pos, 'y': y1Pos, 'z': z1Pos}
-    angle = {'x': xAng, 'y': yAng, 'z': zAng}
-    strikePos = {'x': rotated_strikePos[0], 'y': rotated_strikePos[1], 'z': rotated_strikePos[2]}
-
+    # hitbox['p0'] = {'x': x0Pos, 'y': y0Pos, 'z': z0Pos}
+    # hitbox['p1'] = {'x': x1Pos, 'y': y1Pos, 'z': z1Pos}
+    # angle = {'x': xAng, 'y': yAng, 'z': zAng}
+    # strikePos = {'x': rotated_strikePos[0], 'y': rotated_strikePos[1], 'z': rotated_strikePos[2]}
+    
+    hitbox['p0'] = np.array([x0Pos, y0Pos, z0Pos])
+    hitbox['p1'] = np.array([x1Pos, y1Pos, z1Pos])
+    angle = np.array([xAng, yAng, zAng])
+    strikePos = rotated_strikePos
     
     blockData = {'hitbox' : hitbox, 'angle': angle, 'strikePos': strikePos}
 
@@ -648,8 +652,10 @@ def applyRotationData(objectData, rotationData=[]):
                 rotation += rotationData[rotationIndex]['r']
                 rotationIndex += 1
 
-        p0 = np.array([objectData[i]['hitboxData']['hitbox']['p0']['x'],objectData[i]['hitboxData']['hitbox']['p0']['y'],objectData[i]['hitboxData']['hitbox']['p0']['z']])
-        p1 = np.array([objectData[i]['hitboxData']['hitbox']['p1']['x'],objectData[i]['hitboxData']['hitbox']['p1']['y'],objectData[i]['hitboxData']['hitbox']['p1']['z']])
+        # p0 = np.array([objectData[i]['hitboxData']['hitbox']['p0']['x'],objectData[i]['hitboxData']['hitbox']['p0']['y'],objectData[i]['hitboxData']['hitbox']['p0']['z']])
+        # p1 = np.array([objectData[i]['hitboxData']['hitbox']['p1']['x'],objectData[i]['hitboxData']['hitbox']['p1']['y'],objectData[i]['hitboxData']['hitbox']['p1']['z']])
+        p0 = objectData[i]['hitboxData']['hitbox']['p0']
+        p1 = objectData[i]['hitboxData']['hitbox']['p1']
         center = np.array(0,0,0)
         objectData[i]['hitboxData']['hitbox']['p0'] = rotatePoint(p0, center, 0, rotation, 0)
         objectData[i]['hitboxData']['hitbox']['p1'] = rotatePoint(p1, center, 0, rotation, 0)
