@@ -631,14 +631,13 @@ def applyRotationData(objectData, rotationData=[]):
     
     rotation = 0
     rotationIndex = 0
-    
+
     for i in range(0, len(objectData)):
-        InclusiveFlag = True
-        if rotationIndex + 1 < len(rotationData):           # Check if next index is available to check
-            if rotationData[rotationIndex + 1]['e'] == 0:   # Check if the next rotation event is inclusive or exclusive (if it includes or excludes the notes on beat)
-                InclusiveFlag = True                        #Easily optimizable, but trying to make as readable as possible
-            else:
-                InclusiveFlag = False
+        InclusiveFlag = not rotationData[rotationIndex]['e']
+        # if rotationData[rotationIndex]['e'] == 0:   # Check if the next rotation event is inclusive or exclusive (if it includes or excludes the notes on beat)
+        #     InclusiveFlag = True                        #Easily optimizable, but trying to make as readable as possible
+        # else:
+        #     InclusiveFlag = False
         
         if InclusiveFlag:
             if objectData[i]['beat'] >= rotationData[rotationIndex]['b']:
@@ -655,6 +654,7 @@ def applyRotationData(objectData, rotationData=[]):
         objectData[i]['hitboxData']['hitbox']['p0'] = rotatePoint(p0, center, 0, rotation, 0)
         objectData[i]['hitboxData']['hitbox']['p1'] = rotatePoint(p1, center, 0, rotation, 0)
     
+    return objectData
 
 
 
