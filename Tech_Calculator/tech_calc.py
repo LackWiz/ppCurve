@@ -641,11 +641,11 @@ def applyRotationData(objectData, rotationData=[]):
         
         if InclusiveFlag:
             if objectData[i]['beat'] >= rotationData[rotationIndex]['b']:
-                rotation += rotationData[rotationIndex]
+                rotation += rotationData[rotationIndex]['r']
                 rotationIndex += 1
         else:
             if objectData[i]['beat'] > rotationData[rotationIndex]['b']:
-                rotation += rotationData[rotationIndex]
+                rotation += rotationData[rotationIndex]['r']
                 rotationIndex += 1
 
         p0 = np.array([objectData[i]['hitboxData']['hitbox']['p0']['x'],objectData[i]['hitboxData']['hitbox']['p0']['y'],objectData[i]['hitboxData']['hitbox']['p0']['z']])
