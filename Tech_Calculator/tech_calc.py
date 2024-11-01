@@ -19,8 +19,8 @@ cut_direction_index = [90, 270, 180, 0, 135, 45, 225, 315, 270]     # mathamatic
 xGridDistance = 0.43636   # In meters
 yGridDistance = 0.525   # In meters, averaged 0.55m between bottom and middle row, 0.5m between middle and top row. This will also be scaled according to users height 
 #Bombs are roughly equal in size to note badcut hitboxes @ 0.36m
-bombCenterOffset = [[xGridDistance / 2 - 0.18, yGridDistance / 2 - 0.18, 1 - 0.18], [xGridDistance / 2 + 0.18, yGridDistance / 2 + 0.18, 1 + 0.18]]     
-saberHitDistance = 0.5        # The z position where the hitbox will hit the saber. 0 = hilting, 0.5 = best for consistancy, 1 = tipping
+bombOffset = [[xGridDistance / 2 - 0.18, yGridDistance / 2 - 0.18, 1 - 0.18], [xGridDistance / 2 + 0.18, yGridDistance / 2 + 0.18, 1 + 0.18]]     
+saberHitDistance = 0.5        # The z position where the hitbox will hit the saber. 0 = hilting, 0.5 = mid, 1 = tipping
 
 
 
@@ -280,6 +280,10 @@ def distanceToBeats(bpm, njs, distance):
 
     return beats
 
+def beatsToSeconds(beats, bpm):
+    seconds = beats * 60 / bpm
+    return seconds
+
 def swingXangle(blockPos, handPos):
     return math.degrees(math.asin(handPos[0] - blockPos[0]))
 
@@ -412,7 +416,7 @@ def bindChainsToNotes(noteData, chainData):
 # Base block calculations
 
 # Calculates the entry point of a swing given block position, block angle, and swing angle.
-def calcBlockPosData(cBlockP, cBlockA, swingA = -1):
+def calcBlockPosData(cBlockPosition, cBlockAngle, swingAngle = -1):
     # Block good hitbox X = 0.8m, Y = 0.5m, Z = 1m
     # Hitbox is Z = -0.15m offset from block position 
     # Distance between 2 blocks on the X axis is 0.436m. /2 equals X middle point of the block hitbox.
@@ -426,11 +430,11 @@ def calcBlockPosData(cBlockP, cBlockA, swingA = -1):
     strikePos = []
     noteAngle = []
 
-    xNoteRelativeCenter = (cBlockP[0] + 0.5 - 2) * xGridDistance        # Calculate the xCoordinates relative to the middle of the world.
+    xNoteRelativeCenter = (cBlockPosition[0] + 0.5 - 2) * xGridDistance        # Calculate the xCoordinates relative to the middle of the world.
 
     xAng = 0            # Pitch, Yaw, Roll
     yAng = np.arccos(xNoteRelativeCenter / (saberHitDistance + 0.85))    #  saber length + 0.85 forward z hitbox. 0° is straight forwards, + angle is CC, - angle is clockwise.
-    zAng = cBlockA
+    zAng = cBlockAngle
 
     # Initialize point positions for hitbox caluclations
     p0 = np.array([0, 0, 0.15])       
@@ -440,10 +444,10 @@ def calcBlockPosData(cBlockP, cBlockA, swingA = -1):
     #0.4 = (x) middle of width of hitbox, (y) 0.5 = top of hitbox, (z) length of hitbox
     initStrikePos = [0.4, 0.5, p0[2] + saberHitDistance]    # Initializa strike position.
     
-    if swingA != -1:
-        xDistance = 0.4 * math.sin(math.radians(swingA - cBlockA))
-        xOffset = xDistance * math.sin(math.radians(cBlockA - 180))
-        yOffset = xDistance * math.cos(math.radians(cBlockA - 180))
+    if swingAngle != -1:
+        xDistance = 0.4 * math.sin(math.radians(swingAngle - cBlockAngle))
+        xOffset = xDistance * math.sin(math.radians(cBlockAngle - 180))
+        yOffset = xDistance * math.cos(math.radians(cBlockAngle - 180))
     else:
         xOffset = 0
         yOffset = 0
@@ -457,10 +461,10 @@ def calcBlockPosData(cBlockP, cBlockA, swingA = -1):
     rotated_strikePos = rotatePoint(initStrikePos, center, xAng, yAng, zAng)
     
     # Apply grid positioning
-    x0Pos = cBlockP[0] * xGridDistance + rotated_p0[0]
-    x1Pos = cBlockP[0] * xGridDistance + rotated_p1[0]
-    y0Pos = cBlockP[1] * yGridDistance + rotated_p0[1]
-    y1Pos = cBlockP[1] * yGridDistance + rotated_p1[1]
+    x0Pos = cBlockPosition[0] * xGridDistance + rotated_p0[0]
+    x1Pos = cBlockPosition[0] * xGridDistance + rotated_p1[0]
+    y0Pos = cBlockPosition[1] * yGridDistance + rotated_p0[1]
+    y1Pos = cBlockPosition[1] * yGridDistance + rotated_p1[1]
     z0Pos = rotated_p0[2]
     z1Pos = rotated_p1[2]
 
@@ -475,20 +479,33 @@ def calcBlockPosData(cBlockP, cBlockA, swingA = -1):
     angle = np.array([xAng, yAng, zAng])
     strikePos = rotated_strikePos
     
-    blockData = {'hitbox' : hitbox, 'angle': angle, 'strikePos': strikePos}
+    blockData = {'posData' : hitbox, 'angle': angle, 'strikePos': strikePos}
 
     return blockData
 
 def calculateBombHitbox(bPos: list):
-    hitboxX1 = bPos[0] * xGridDistance + bombCenterOffset[0][0]
-    hitboxY1 = bPos[1] * yGridDistance + bombCenterOffset[0][1]
-    hitboxZ1 = bombCenterOffset[0][2]
-    hitboxX2 = bPos[0] * xGridDistance + bombCenterOffset[1][0]
-    hitboxY2 = bPos[1] * yGridDistance + bombCenterOffset[1][1]
-    hitboxZ2 = bombCenterOffset[1][2]
+    hitboxX1 = bPos[0] * xGridDistance + bombOffset[0][0]
+    hitboxY1 = bPos[1] * yGridDistance + bombOffset[0][1]
+    hitboxZ1 = bombOffset[0][2]
+    hitboxX2 = bPos[0] * xGridDistance + bombOffset[1][0]
+    hitboxY2 = bPos[1] * yGridDistance + bombOffset[1][1]
+    hitboxZ2 = bombOffset[1][2]
 
-    hitboxPos = [[hitboxX1, hitboxY1, hitboxZ1], [hitboxX2, hitboxY2, hitboxZ2]]
+    hitbox = {'p0': np.array([hitboxX1, hitboxY1, hitboxZ1]), 'p1': np.array([hitboxX2, hitboxY2, hitboxZ2])}
+    return hitbox
+
+def calculateWallHitbox(xPos, yPos, width, distance, height):
+    hitboxX1 = xPos * xGridDistance
+    hitboxY1 = yPos * yGridDistance
+    # hitboxZ1 = -0.25                          # Need to verify: Subtract 0.25 to make front face of wall line up with front face of note (walls just built like that) (cred: arcViewer)
+    hitboxZ1 = 1                                
+    hitboxX2 = (xPos + width) * xGridDistance
+    hitboxY2 = (yPos + height) * yGridDistance
+    hitboxZ2 = distance * metadata['njs'] + 1
+
+    hitboxPos = {'p0': np.array([hitboxX1, hitboxY1, hitboxZ1]), 'p1': np.array([hitboxX2, hitboxY2, hitboxZ2])}
     return hitboxPos
+
 
 def caltulateStrikeData(objectData):
     pass
@@ -574,7 +591,7 @@ def createNoteList(objectData: dict, handedness: int):    # handedness: 0 = left
         swingData[-1]['isDot'] = isDot
         swingData[-1]['beat'] = swingBeginning
         swingData[-1]['beatF'] = swingEnd
-        swingData[-1]['hitboxData'] = hitboxPosData
+        swingData[-1]['hitbox'] = hitboxPosData
         swingData[-1]['noteAngle'] = blockAngle
         swingData[-1]['preAngleDisabled'] = cNote['preArc']
         swingData[-1]['postAngleDisabled'] = cNote['postArc']
@@ -593,17 +610,18 @@ def createNoteList(objectData: dict, handedness: int):    # handedness: 0 = left
 
 def createBombList(bombs: list):
     bombData = []
-    i = 0
-    while i < len(bombs):
+    bombIndex = 0
+    while bombIndex < len(bombs):
         sameTime = []
-        sameTime.append(bombs[i])
+        sameTime.append(bombs[bombIndex])
 
         # In many cases, there are many bombs on the same beat. Therefore we need to find the best/preferred saber swing position along with acceptable saber positions.
-        if i + 1 < len(bombs):
-            if(bombs[i]['b'] == bombs[i + 1]['b']):
-                while (bombs[i]['b'] == bombs[i + 1]['b']) and (i + 2 < len(bombs)):
-                    sameTime.append(bombs[i])
-                    i += 1
+        if bombIndex + 2 < len(bombs):
+            # if(bombs[i]['b'] == bombs[i + 1]['b']):
+            while (bombs[bombIndex]['b'] == bombs[bombIndex + 1]['b']) and (bombIndex + 2 < len(bombs)):
+                bombIndex += 1
+                sameTime.append(bombs[bombIndex])
+                
 
         
         accumulatedX = 0
@@ -613,7 +631,7 @@ def createBombList(bombs: list):
             accumulatedX += (sameTime[j]['x'] - 1.5) * xGridDistance    # Set origin to the center of the grid for recommend swing angle calculations
             accumulatedY += (sameTime[j]['y'] - 1) * yGridDistance    # Scaled to reflect differing scaling of the axis
 
-        averagedPosition = [accumulatedX / len(sameTime), accumulatedY / len(sameTime)]
+        # averagedPosition = [accumulatedX / len(sameTime), accumulatedY / len(sameTime)]
         # recommendedSwingAngle = math.degrees(math.atan2(averagedPosition[1], averagedPosition[0]))
         # recommendedSwingAngle = mod(recommendedSwingAngle + 180, 360)   # Recommended swing angle should be *away* from the bombs.
 
@@ -621,44 +639,103 @@ def createBombList(bombs: list):
         bombData[-1]['beat'] = sameTime[0]['b']
         # bombData[-1]['recommendedSA'] = recommendedSwingAngle
 
-        bombData[-1]['hitBoxList'] = []        # We will approximate bombs to be cubes instead of sphears for speed.
+        bombData[-1]['hitbox'] = {'posData': []}        
         for j in range(0, len(sameTime)):
-            bombPos = [sameTime[j]['x'], sameTime[j]['x']]
-            bombData[-1]['hitBoxList'].append(calculateBombHitbox(bombPos))
+            bombPos = [sameTime[j]['x'], sameTime[j]['y']]
+            bombData[-1]['hitbox']['posData'].append(calculateBombHitbox(bombPos))     # We will approximate bombs to be cubes.
 
-        i += 1
+        bombIndex += 1
     return bombData
+
+def createWallList(walls: list):
+    wallData = []
+    wallIndex = 0
+    while wallIndex < len(walls):
+        sameTime = []
+        sameTime.append(walls[wallIndex])
+
+        # In many cases, there are many walls on the same beat. Therefore we need to find the best/preferred saber swing position along with acceptable saber positions.
+        if wallIndex + 2 < len(walls):
+            while (walls[wallIndex]['b'] == walls[wallIndex + 1]['b']) and (wallIndex + 2 < len(walls)):
+                sameTime.append(walls[wallIndex])
+                wallIndex += 1
+
+        
+        accumulatedX = 0
+        accumulatedY = 0
+
+        for j in range(0, len(sameTime)):
+            accumulatedX += (sameTime[j]['x'] - 1.5) * xGridDistance    # Set origin to the center of the grid for recommend head position
+            accumulatedY += (sameTime[j]['y'] - 1) * yGridDistance    # Scaled to reflect differing scaling of the axis
+
+        averagedPosition = [accumulatedX / len(sameTime), accumulatedY / len(sameTime)]
+        
+
+        wallData.append({})     # Initialize new entry
+        wallData[-1]['beat'] = sameTime[0]['b']
+        
+        
+
+        wallData[-1]['hitbox'] = {'posData': []}      # We will approximate bombs to be cubes instead of sphears for speed.
+        for j in range(0, len(sameTime)):
+            wallData[-1]['hitbox']['posData'].append(calculateWallHitbox(sameTime[j]['x'], sameTime[j]['y'], sameTime[j]['w'], sameTime[j]['d'], sameTime[j]['h']))
+            wallData[-1]['hitbox']['posData'][-1]['lengthSeconds'] = beatsToSeconds(sameTime[j]['d'], metadata['bpm'])
+
+        wallIndex += 1
+    return wallData
+    
 
 def applyRotationData(objectData, rotationData=[]):
     if len(rotationData) == 0:
         return objectData
     
-    rotation = 0
-    rotationIndex = 0
+    rotation = 0        # Current platform rotation (yaw)
+    rotationIndex = 0   # Index of future incoming rotation event
+    InclusiveFlag = not rotationData[rotationIndex]['e']
+    test_rotationChangelog = []
+    if isinstance(objectData[0]['hitbox']['posData'], list):
+        positionDataIsList = True
+    else:
+        positionDataIsList = False
 
     for i in range(0, len(objectData)):
-        InclusiveFlag = not rotationData[rotationIndex]['e']
-        # if rotationData[rotationIndex]['e'] == 0:   # Check if the next rotation event is inclusive or exclusive (if it includes or excludes the notes on beat)
-        #     InclusiveFlag = True                        #Easily optimizable, but trying to make as readable as possible
-        # else:
-        #     InclusiveFlag = False
-        
-        if InclusiveFlag:
-            if objectData[i]['beat'] >= rotationData[rotationIndex]['b']:
-                rotation += rotationData[rotationIndex]['r']
-                rotationIndex += 1
-        else:
-            if objectData[i]['beat'] > rotationData[rotationIndex]['b']:
-                rotation += rotationData[rotationIndex]['r']
-                rotationIndex += 1
+        if rotationIndex < len(rotationData):
+            
+            if InclusiveFlag:
+                while objectData[i]['beat'] >= rotationData[rotationIndex]['b']:    # While loop to handle cases where there are multiple rotation events between objects
+                    rotation += rotationData[rotationIndex]['r']
+                    test_rotationChangelog.append({'rotation': rotation, 'beat': rotationData[rotationIndex]['b']})
+                    if rotationIndex + 1 < len(rotationData):
+                        rotationIndex += 1
+                        InclusiveFlag = not rotationData[rotationIndex]['e']
+                    else:
+                        break
+            else:
+                while objectData[i]['beat'] > rotationData[rotationIndex]['b']:     # While loop to handle cases where there are multiple rotation events between objects
+                    rotation += rotationData[rotationIndex]['r']
+                    test_rotationChangelog.append({'rotation': rotation, 'beat': rotationData[rotationIndex]['b']})
+                    if rotationIndex + 1 < len(rotationData):
+                        rotationIndex += 1
+                        InclusiveFlag = not rotationData[rotationIndex]['e']
+                    else:
+                        break
 
-        # p0 = np.array([objectData[i]['hitboxData']['hitbox']['p0']['x'],objectData[i]['hitboxData']['hitbox']['p0']['y'],objectData[i]['hitboxData']['hitbox']['p0']['z']])
-        # p1 = np.array([objectData[i]['hitboxData']['hitbox']['p1']['x'],objectData[i]['hitboxData']['hitbox']['p1']['y'],objectData[i]['hitboxData']['hitbox']['p1']['z']])
-        p0 = objectData[i]['hitboxData']['hitbox']['p0']
-        p1 = objectData[i]['hitboxData']['hitbox']['p1']
-        center = np.array(0,0,0)
-        objectData[i]['hitboxData']['hitbox']['p0'] = rotatePoint(p0, center, 0, rotation, 0)
-        objectData[i]['hitboxData']['hitbox']['p1'] = rotatePoint(p1, center, 0, rotation, 0)
+        # p0 = np.array([objectData[i]['hitbox']['p0']['x'],objectData[i]['hitbox']['p0']['y'],objectData[i]['hitbox']['p0']['z']])
+        # p1 = np.array([objectData[i]['hitbox']['p1']['x'],objectData[i]['hitbox']['p1']['y'],objectData[i]['hitbox']['p1']['z']])
+        if positionDataIsList:
+            for posIndex in range(0, len(objectData[i]['hitbox']['posData'])):
+                p0 = objectData[i]['hitbox']['posData'][posIndex]['p0']
+                p1 = objectData[i]['hitbox']['posData'][posIndex]['p1']
+                center = np.array([xGridDistance * 2, 0, 0])
+                # Rotation must be inverted to convert between mathimatical and beatsaber rotation orientation
+                objectData[i]['hitbox']['posData'][posIndex]['p0'] = rotatePoint(p0, center, 0, -rotation, 0)
+                objectData[i]['hitbox']['posData'][posIndex]['p1'] = rotatePoint(p1, center, 0, -rotation, 0)
+        else:
+            p0 = objectData[i]['hitbox']['posData']['p0']
+            p1 = objectData[i]['hitbox']['posData']['p1']
+            center = np.array([0,0,0])
+            objectData[i]['hitbox']['posData']['p0'] = rotatePoint(p0, center, 0, -rotation, 0)
+            objectData[i]['hitbox']['posData']['p1'] = rotatePoint(p1, center, 0, -rotation, 0)
     
     return objectData
 
@@ -691,11 +768,11 @@ def primarySwingPath(swingData, handedness):
         if not cSwing['isBomb']:
             resolution = 20                         # Minimum 10 points to get useful data
 
-            bPos = np.array([cSwing['hitboxData']['strikePos']['x'], cSwing['hitboxData']['strikePos']['y'], cSwing['hitboxData']['strikePos']['z']])
+            bPos = np.array([cSwing['hitbox']['strikePos']['x'], cSwing['hitbox']['strikePos']['y'], cSwing['hitbox']['strikePos']['z']])
 
             # hPos = 
 
-            bPos = np.array([cSwing['hitboxData']['strikePos']['x'], cSwing['hitboxData']['strikePos']['y'], cSwing['hitboxData']['strikePos']['z']])
+            bPos = np.array([cSwing['hitbox']['strikePos']['x'], cSwing['hitbox']['strikePos']['y'], cSwing['hitbox']['strikePos']['z']])
             distance = bPos - hPos
             
 
@@ -797,10 +874,12 @@ def techOperations(B_mapData: dict, metadata: dict, isuser=True, verbose=True):
     LeftBaseNoteData = createNoteList(B_LeftNoteData, 0)
     RightBaseNoteData = createNoteList(B_RightNoteData, 1)
     BombData = createBombList(B_BombData)
+    WallData = createWallList(B_WallData)
     if len(B_mapData['rotationEvents']) > 0:
         LeftBaseNoteData = applyRotationData(LeftBaseNoteData, B_mapData['rotationEvents'])
         RightBaseNoteData = applyRotationData(RightBaseNoteData, B_mapData['rotationEvents'])
         BombData = applyRotationData(BombData, B_mapData['rotationEvents'])
+        WallData = applyRotationData(WallData, B_mapData['rotationEvents'])
 
     LeftSwingPath = primarySwingPath(LeftBaseNoteData, 0)
     RightSwingPath = primarySwingPath(RightBaseNoteData, 1)
