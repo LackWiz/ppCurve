@@ -11,20 +11,18 @@ import time
 import copy
 from collections import deque
 
-
-# Works for both V2 and V3
+# All angles are in conventional mathimatical notations (positive angeles are counter-clockwise, 0° starts in the east direction)
+# Works for V2 - V3.3.0
 # Easy = 1, Normal = 3, Hard = 5, Expert = 7, Expert+ = 9
 # b = time, x and y = grid location from bottom left, a = angle offset, c = left or right respectively, d = direction
 cut_direction_index = [90, 270, 180, 0, 135, 45, 225, 315, 270]     # mathamatical 0°, direction of cut
 xGridDistance = 0.43636   # In meters
-yGridDistance = 0.525   # In meters, averaged 0.55m between bottom and middle row, 0.5m between middle and top row. This will also be scaled according to users height 
+yGridDistance = 0.525   # In meters, averaged 0.55m between bottom and middle row, 0.5m between middle and top row.
 #Bombs are roughly equal in size to note badcut hitboxes @ 0.36m
 bombOffset = [[xGridDistance / 2 - 0.18, yGridDistance / 2 - 0.18, 1 - 0.18], [xGridDistance / 2 + 0.18, yGridDistance / 2 + 0.18, 1 + 0.18]]     
 saberHitDistance = 0.5        # The z position where the hitbox will hit the saber. 0 = hilting, 0.5 = mid, 1 = tipping
 
-
-
-# GLobal base functions
+# ------------------------ Base functions ------------------------
 
 def average(lst, setLen=0):  # Returns the averate of a list of integers
     if len(lst) > 0:
@@ -55,7 +53,7 @@ def lerp(p0, p1, t):
     offset = p0
     return offset + scale * t
 
-#Not the correct way to define function input type, but it'll help someone.
+# Not the correct way to define function input type, but it'll help someone.
 def PointOnQuadBezier(p0: np.array, p1: np.array, p2: np.array, t):
     return (math.pow(1 - t, 2) * p0) + (2 * (1 - t) * t * p1) + (math.pow(t, 2) * p2)
 
@@ -107,14 +105,16 @@ def rotatePoint(p0, center, pitch, yaw, roll):
     roll = np.deg2rad(roll)
 
     new_p0 = rotate_x(p0, center, pitch)
-    
     new_p0 = rotate_y(new_p0, center, -yaw)
-    
     new_p0 = rotate_z(new_p0, center, roll)
-    
     return new_p0
 
-# Map preparation functions
+def combineAndSortList(array1, array2, key):
+    combinedArray = array1 + array2
+    combinedArray = sorted(combinedArray, key=lambda x: x[f'{key}'])  # once combined, sort by time
+    return combinedArray
+
+# ------------------------ Map parsing and information extraction functions ------------------------
 
 def V2_to_V3(V2mapData: dict):    # Convert V2 JSON to V3
     newMapData = {'colorNotes':[], 'bombNotes':[], 'obstacles':[], 'sliders':[], 'burstSliders':[]}
@@ -416,7 +416,7 @@ def bindChainsToNotes(noteData, chainData):
 # Base block calculations
 
 # Calculates the entry point of a swing given block position, block angle, and swing angle.
-def calcBlockPosData(cBlockPosition, cBlockAngle, swingAngle = -1):
+def calcNoteHitbox(cBlockPosition, cBlockAngle, swingAngle = -1):
     # Block good hitbox X = 0.8m, Y = 0.5m, Z = 1m
     # Hitbox is Z = -0.15m offset from block position 
     # Distance between 2 blocks on the X axis is 0.436m. /2 equals X middle point of the block hitbox.
@@ -425,7 +425,6 @@ def calcBlockPosData(cBlockPosition, cBlockAngle, swingAngle = -1):
     # Distance between 2 blocks on the Y axis is average 0.525m. /2 equals Y middle point of the block hitbox.
     # baseYPosition = 0.2625
 
-    
     hitbox = {'p0': {}, 'p1': {}}
     strikePos = []
     noteAngle = []
@@ -433,32 +432,17 @@ def calcBlockPosData(cBlockPosition, cBlockAngle, swingAngle = -1):
     xNoteRelativeCenter = (cBlockPosition[0] + 0.5 - 2) * xGridDistance        # Calculate the xCoordinates relative to the middle of the world.
 
     xAng = 0            # Pitch, Yaw, Roll
-    yAng = np.arccos(xNoteRelativeCenter / (saberHitDistance + 0.85))    #  saber length + 0.85 forward z hitbox. 0° is straight forwards, + angle is CC, - angle is clockwise.
+    yAng = np.arccos(xNoteRelativeCenter / (saberHitDistance + 0.85))    #  saber length + 0.85 forward z hitbox. 0° is straight forwards, +angle is CC, -angle is clockwise.
     zAng = cBlockAngle
 
-    # Initialize point positions for hitbox caluclations
-    p0 = np.array([0, 0, 0.15])       
-    p1 = np.array([0.8, 0.5, 1.15])
-    center = np.array([0.4, 0.25, 1])
-    
-    #0.4 = (x) middle of width of hitbox, (y) 0.5 = top of hitbox, (z) length of hitbox
-    initStrikePos = [0.4, 0.5, p0[2] + saberHitDistance]    # Initializa strike position.
-    
-    if swingAngle != -1:
-        xDistance = 0.4 * math.sin(math.radians(swingAngle - cBlockAngle))
-        xOffset = xDistance * math.sin(math.radians(cBlockAngle - 180))
-        yOffset = xDistance * math.cos(math.radians(cBlockAngle - 180))
-    else:
-        xOffset = 0
-        yOffset = 0
-
-    initStrikePos[0] += xOffset
-    initStrikePos[1] += yOffset
+    # Initialize point positions for hitbox caluclations in world space
+    p0 = np.array([0, 0, 0.15])         # front left corner 
+    p1 = np.array([0.8, 0.5, 1.15])     # back right corner
+    center = np.array([0.4, 0.25, 1])   # center of cube 
     
     # Apply rotation transformes
     rotated_p0 = rotatePoint(p0, center, xAng, yAng, zAng)
     rotated_p1 = rotatePoint(p1, center, xAng, yAng, zAng)
-    rotated_strikePos = rotatePoint(initStrikePos, center, xAng, yAng, zAng)
     
     # Apply grid positioning
     x0Pos = cBlockPosition[0] * xGridDistance + rotated_p0[0]
@@ -477,7 +461,6 @@ def calcBlockPosData(cBlockPosition, cBlockAngle, swingAngle = -1):
     hitbox['p0'] = np.array([x0Pos, y0Pos, z0Pos])
     hitbox['p1'] = np.array([x1Pos, y1Pos, z1Pos])
     angle = np.array([xAng, yAng, zAng])
-    strikePos = rotated_strikePos
     
     blockData = {'posData' : hitbox, 'angle': angle, 'strikePos': strikePos}
 
@@ -506,17 +489,9 @@ def calculateWallHitbox(xPos, yPos, width, distance, height):
     hitboxPos = {'p0': np.array([hitboxX1, hitboxY1, hitboxZ1]), 'p1': np.array([hitboxX2, hitboxY2, hitboxZ2])}
     return hitboxPos
 
-
-def caltulateStrikeData(objectData):
-    pass
-
 def createNoteList(objectData: dict, handedness: int):    # handedness: 0 = left, 1 = right
     # Purpose of the function is to turn notes into swings. All notes, including those included in sliders will get their own swing.
     # Later swing smoothing will combine individual swing data into a smooth swing path for calculation
-
-    notes = objectData['notes']
-    arcs = objectData['arcs']
-    chains = objectData['chains']
 
     # Swing data structure
     # beat: float The time of the swing
@@ -534,11 +509,12 @@ def createNoteList(objectData: dict, handedness: int):    # handedness: 0 = left
     # freePoints: float How many points were given for free (only applys for chain links)
     # totalPoints: float Total points earnable from the swing
     
-
-    swingData = []
-
+    notes = objectData['notes']
+    arcs = objectData['arcs']
+    chains = objectData['chains']
     bindArcsToNotes(notes, arcs)        # Assigns pre/post angle required bool values to every note/chain
     bindChainsToNotes(notes, chains)
+    swingData = []
 
     for i in range(0, len(notes)):
         cNote = notes[i]
@@ -547,7 +523,7 @@ def createNoteList(objectData: dict, handedness: int):    # handedness: 0 = left
         if cNote['d'] == 8:
             isDot = True
            
-        hitboxPosData = calcBlockPosData([cNote['x'], cNote['y']], blockAngle)     
+        hitboxPosData = calcNoteHitbox([cNote['x'], cNote['y']], blockAngle)     
 
         swingBeginning = cNote['b']
         
@@ -570,7 +546,7 @@ def createNoteList(objectData: dict, handedness: int):    # handedness: 0 = left
                 linkPos.append(PointOnQuadBezier(chainStartPos, midPoint, chainEndPos, t))  # Save block position on the grid for conversion
                 linkAngle.append(AngleOnQuadBezier(chainStartPos, midPoint, chainEndPos, t))
                 # Calculate block swing strike position in meters and save.
-                linkPos[-1] = calcBlockPosData(linkPos[-1], linkAngle[-1])
+                linkPos[-1] = calcNoteHitbox(linkPos[-1], linkAngle[-1])
 
             notes[i]['chainData']['linkPos'] = linkPos
             notes[i]['chainData']['linkAngle'] = linkAngle
@@ -587,7 +563,6 @@ def createNoteList(objectData: dict, handedness: int):    # handedness: 0 = left
 
         swingData.append({})
         swingData[-1]['LRhand'] = handedness
-        swingData[-1]['isBomb'] = False
         swingData[-1]['isDot'] = isDot
         swingData[-1]['beat'] = swingBeginning
         swingData[-1]['beatF'] = swingEnd
@@ -615,22 +590,16 @@ def createBombList(bombs: list):
         sameTime = []
         sameTime.append(bombs[bombIndex])
 
-        # In many cases, there are many bombs on the same beat. Therefore we need to find the best/preferred saber swing position along with acceptable saber positions.
-        if bombIndex + 2 < len(bombs):
-            # if(bombs[i]['b'] == bombs[i + 1]['b']):
-            while (bombs[bombIndex]['b'] == bombs[bombIndex + 1]['b']) and (bombIndex + 2 < len(bombs)):
-                bombIndex += 1
-                sameTime.append(bombs[bombIndex])
-                
+        # Bombs on the same beat.
+        while (bombs[bombIndex]['b'] == bombs[bombIndex + 1]['b']) and (bombIndex + 2 < len(bombs)):
+            bombIndex += 1
+            sameTime.append(bombs[bombIndex])
 
-        
-        accumulatedX = 0
-        accumulatedY = 0
-
-        for j in range(0, len(sameTime)):
-            accumulatedX += (sameTime[j]['x'] - 1.5) * xGridDistance    # Set origin to the center of the grid for recommend swing angle calculations
-            accumulatedY += (sameTime[j]['y'] - 1) * yGridDistance    # Scaled to reflect differing scaling of the axis
-
+        # accumulatedX = 0
+        # accumulatedY = 0
+        # for j in range(0, len(sameTime)):
+        #     accumulatedX += (sameTime[j]['x'] - 1.5) * xGridDistance    # Set origin to the center of the grid for recommend swing angle calculations
+        #     accumulatedY += (sameTime[j]['y'] - 1) * yGridDistance      # Scaled to reflect differing scaling of the axis
         # averagedPosition = [accumulatedX / len(sameTime), accumulatedY / len(sameTime)]
         # recommendedSwingAngle = math.degrees(math.atan2(averagedPosition[1], averagedPosition[0]))
         # recommendedSwingAngle = mod(recommendedSwingAngle + 180, 360)   # Recommended swing angle should be *away* from the bombs.
@@ -645,46 +614,41 @@ def createBombList(bombs: list):
             bombData[-1]['hitbox']['posData'].append(calculateBombHitbox(bombPos))     # We will approximate bombs to be cubes.
 
         bombIndex += 1
+    
     return bombData
 
 def createWallList(walls: list):
     wallData = []
     wallIndex = 0
+    
     while wallIndex < len(walls):
         sameTime = []
         sameTime.append(walls[wallIndex])
 
-        # In many cases, there are many walls on the same beat. Therefore we need to find the best/preferred saber swing position along with acceptable saber positions.
-        if wallIndex + 2 < len(walls):
-            while (walls[wallIndex]['b'] == walls[wallIndex + 1]['b']) and (wallIndex + 2 < len(walls)):
-                sameTime.append(walls[wallIndex])
-                wallIndex += 1
+        # Walls on the same beat.
+        while (walls[wallIndex]['b'] == walls[wallIndex + 1]['b']) and (wallIndex + 2 < len(walls)):
+            sameTime.append(walls[wallIndex])
+            wallIndex += 1
 
+        # accumulatedX = 0
+        # accumulatedY = 0
+        # for j in range(0, len(sameTime)):
+        #     accumulatedX += (sameTime[j]['x'] - 1.5) * xGridDistance    # Set origin to the center of the grid for recommend head position
+        #     accumulatedY += (sameTime[j]['y'] - 1) * yGridDistance      # Scaled to reflect differing scaling of the axis
+        # averagedPosition = [accumulatedX / len(sameTime), accumulatedY / len(sameTime)]
         
-        accumulatedX = 0
-        accumulatedY = 0
-
-        for j in range(0, len(sameTime)):
-            accumulatedX += (sameTime[j]['x'] - 1.5) * xGridDistance    # Set origin to the center of the grid for recommend head position
-            accumulatedY += (sameTime[j]['y'] - 1) * yGridDistance    # Scaled to reflect differing scaling of the axis
-
-        averagedPosition = [accumulatedX / len(sameTime), accumulatedY / len(sameTime)]
-        
-
         wallData.append({})     # Initialize new entry
         wallData[-1]['beat'] = sameTime[0]['b']
-        
-        
-
         wallData[-1]['hitbox'] = {'posData': []}      # We will approximate bombs to be cubes instead of sphears for speed.
+        
         for j in range(0, len(sameTime)):
             wallData[-1]['hitbox']['posData'].append(calculateWallHitbox(sameTime[j]['x'], sameTime[j]['y'], sameTime[j]['w'], sameTime[j]['d'], sameTime[j]['h']))
             wallData[-1]['hitbox']['posData'][-1]['lengthSeconds'] = beatsToSeconds(sameTime[j]['d'], metadata['bpm'])
 
         wallIndex += 1
+    
     return wallData
     
-
 def applyRotationData(objectData, rotationData=[]):
     if len(rotationData) == 0:
         return objectData
@@ -692,7 +656,7 @@ def applyRotationData(objectData, rotationData=[]):
     rotation = 0        # Current platform rotation (yaw)
     rotationIndex = 0   # Index of future incoming rotation event
     InclusiveFlag = not rotationData[rotationIndex]['e']
-    test_rotationChangelog = []
+    # test_rotationChangelog = []
     if isinstance(objectData[0]['hitbox']['posData'], list):
         positionDataIsList = True
     else:
@@ -704,7 +668,7 @@ def applyRotationData(objectData, rotationData=[]):
             if InclusiveFlag:
                 while objectData[i]['beat'] >= rotationData[rotationIndex]['b']:    # While loop to handle cases where there are multiple rotation events between objects
                     rotation += rotationData[rotationIndex]['r']
-                    test_rotationChangelog.append({'rotation': rotation, 'beat': rotationData[rotationIndex]['b']})
+                    # test_rotationChangelog.append({'rotation': rotation, 'beat': rotationData[rotationIndex]['b']})
                     if rotationIndex + 1 < len(rotationData):
                         rotationIndex += 1
                         InclusiveFlag = not rotationData[rotationIndex]['e']
@@ -713,7 +677,7 @@ def applyRotationData(objectData, rotationData=[]):
             else:
                 while objectData[i]['beat'] > rotationData[rotationIndex]['b']:     # While loop to handle cases where there are multiple rotation events between objects
                     rotation += rotationData[rotationIndex]['r']
-                    test_rotationChangelog.append({'rotation': rotation, 'beat': rotationData[rotationIndex]['b']})
+                    # test_rotationChangelog.append({'rotation': rotation, 'beat': rotationData[rotationIndex]['b']})
                     if rotationIndex + 1 < len(rotationData):
                         rotationIndex += 1
                         InclusiveFlag = not rotationData[rotationIndex]['e']
@@ -739,7 +703,27 @@ def applyRotationData(objectData, rotationData=[]):
     
     return objectData
 
+# ------------------------ Algo specific functions ------------------------
+# TODO: Finish
+# hitboxPos: Vector3 (touple of floats)
+# hitboxAngle: Angle3 (touple of floats)
+# strikeAngle: float
+def calculate115(hitboxPos, hitboxAngle, strikeAngle):
+    #0.4 = (x) middle of width of hitbox, (y) 0.5 = top of hitbox, (z) length of hitbox
+    strikePos = [0.4, 0.5, hitboxPos['p0'][2] + saberHitDistance]    # Initializa strike position.
+    
+    if strikeAngle != -1:        # If given a swingAngle, calculate exact point on the hitbox to strike for 15 acc
+        xDistance = 0.4 * math.sin(math.radians(strikeAngle - hitboxAngle))
+        xOffset = xDistance * math.sin(math.radians(hitboxAngle - 180))
+        yOffset = xDistance * math.cos(math.radians(hitboxAngle - 180))
+    else:
+        xOffset = 0
+        yOffset = 0
 
+    strikePos[0] += xOffset
+    strikePos[1] += yOffset
+    # rotated_strikePos = rotatePoint(initStrikePos, center, hitboxAngle[0], hitboxAngle[1], hitboxAngle[2])
+    return strikePos
 
 def primarySwingPath(swingData, handedness):
 
@@ -859,23 +843,19 @@ def swingPathSmoothing(pathData, metaData):
         pathData[-1]['path']['posAccel'].append(np.array([0,0]))
             
 
-# Try to find if placement match for slider
 
-def combineAndSortList(array1, array2, key):
-    combinedArray = array1 + array2
-    combinedArray = sorted(combinedArray, key=lambda x: x[f'{key}'])  # once combined, sort by time
-    return combinedArray
+# ------------------------ Function Execution ------------------------
 
 def techOperations(B_mapData: dict, metadata: dict, isuser=True, verbose=True):
-    B_LeftNoteData = splitMapData(B_mapData, 0)
+    B_LeftNoteData = splitMapData(B_mapData, 0)     # Parse mapdata into separate varables to pass into functions
     B_RightNoteData = splitMapData(B_mapData, 1)
     B_BombData = splitMapData(B_mapData, 2)
     B_WallData = splitMapData(B_mapData, 3)
-    LeftBaseNoteData = createNoteList(B_LeftNoteData, 0)
+    LeftBaseNoteData = createNoteList(B_LeftNoteData, 0)    # Create extract object data with game mechanics
     RightBaseNoteData = createNoteList(B_RightNoteData, 1)
     BombData = createBombList(B_BombData)
     WallData = createWallList(B_WallData)
-    if len(B_mapData['rotationEvents']) > 0:
+    if len(B_mapData['rotationEvents']) > 0:                # Apple rotation data if available
         LeftBaseNoteData = applyRotationData(LeftBaseNoteData, B_mapData['rotationEvents'])
         RightBaseNoteData = applyRotationData(RightBaseNoteData, B_mapData['rotationEvents'])
         BombData = applyRotationData(BombData, B_mapData['rotationEvents'])
@@ -884,14 +864,9 @@ def techOperations(B_mapData: dict, metadata: dict, isuser=True, verbose=True):
     LeftSwingPath = primarySwingPath(LeftBaseNoteData, 0)
     RightSwingPath = primarySwingPath(RightBaseNoteData, 1)
     
-
-
-
     LeftSwingData = []
     RightSwingData = []
 
-
-    
     if isuser:
         tech = 1
         print(f"Calculated Tech = {round(tech, 2)}")  # Put Breakpoint here if you want to see
@@ -914,15 +889,13 @@ def mapCalculation(mapData, metadata, isuser=True, verbose=True):
 
 if __name__ == "__main__":
     print("input map key")
-    mapKey = input()
-    mapKey = mapKey.replace("!bsr ", "")
-    infoData = setup.loadInfoData(mapKey)
-    metadata = {'bpm': infoData['_beatsPerMinute']}
+    # mapKey = input()
+    # mapKey = mapKey.replace("!bsr ", "")
+    mapKey = '38419'
     characteristic = '90Degree'
-    # availableDiffs = setup.findDiffs(setup.findSongPath(mapKey))
+
+    infoData = setup.loadInfoData(mapKey)
     availableDiffs = setup.findDiffs(setup.findSongPath(mapKey), characteristic)
-
-
 
     if len(availableDiffs) > 1:
         print(f'Choose Diff num: {availableDiffs}')
@@ -940,6 +913,8 @@ if __name__ == "__main__":
         if d.get('_difficultyRank') == diffNum:
             diffIndex = i
             break
+    
+    metadata = {'bpm': infoData['_beatsPerMinute']}
     metadata['njs'] = infoData['_difficultyBeatmapSets'][charIndex]['_difficultyBeatmaps'][diffIndex]['_noteJumpMovementSpeed']
     metadata['offset'] = infoData['_difficultyBeatmapSets'][charIndex]['_difficultyBeatmaps'][diffIndex]['_noteJumpStartBeatOffset']
 
