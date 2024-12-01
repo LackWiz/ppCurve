@@ -533,7 +533,7 @@ def noteAngleSnapping(noteGroup):   # Expects an array size of 2
     noteAngles = []
     match dotCount:
         case 0:
-            if noteGroup[0]['d'] == noteGroup[1]['d']:
+            if noteGroup[0]['d'] == noteGroup[1]['d']:      # Arrow notes must have the same d value to snap
                 noteAngle = cut_direction_index[noteGroup[0]['d']]
 
                 angleFromPosition = mod(math.degrees(math.atan2(noteGroup[0]['y'] - noteGroup[1]['y'], noteGroup[0]['x'] - noteGroup[1]['x'])), 360)
@@ -551,10 +551,33 @@ def noteAngleSnapping(noteGroup):   # Expects an array size of 2
                     noteAngles.append(mod(cut_direction_index[noteGroup[0]['d']] + noteGroup[0]['a'], 360))
                     noteAngles.append(mod(cut_direction_index[noteGroup[1]['d']] + noteGroup[1]['a'], 360))
 
-        case 1:
-            pass    #TODO finish
-        case 2:
-            pass    #TODO finish
+        case 1:     # Arrow note with a dot note
+            
+            if noteGroup[0]['d'] != 8:      # Determine where in the array contains the arrow note
+                arrowIndex = 0
+            else:
+                arrowIndex = 1
+            
+            noteAngle = cut_direction_index[noteGroup[arrowIndex]['d']]     
+            angleFromPosition = mod(math.degrees(math.atan2(noteGroup[0]['y'] - noteGroup[1]['y'], noteGroup[0]['x'] - noteGroup[1]['x'])), 360)
+            mirroredAngleFromPosition = mod(angleFromPosition + 180, 360)
+
+            if abs(noteAngle - angleFromPosition) <= 22.5:
+                noteAngles.append(angleFromPosition)
+                noteAngles.append(angleFromPosition)
+            
+            elif abs(noteAngle - mirroredAngleFromPosition) <= 22.5:
+                noteAngles.append(mirroredAngleFromPosition)
+                noteAngles.append(mirroredAngleFromPosition)
+
+            else:
+                noteAngles.append(mod(cut_direction_index[noteGroup[0]['d']] + noteGroup[0]['a'], 360))
+                noteAngles.append(mod(cut_direction_index[noteGroup[1]['d']] + noteGroup[1]['a'], 360))
+
+        case 2:     # 2 dot notes
+            angleFromPosition = mod(math.degrees(math.atan2(noteGroup[0]['y'] - noteGroup[1]['y'], noteGroup[0]['x'] - noteGroup[1]['x'])), 360)
+            noteAngles.append(angleFromPosition)
+            noteAngles.append(angleFromPosition)
 
     return noteAngles
 
