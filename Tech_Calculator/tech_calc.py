@@ -921,13 +921,13 @@ if __name__ == "__main__":
         print(f'autoloading {diffNum}')
     mapData = setup.loadMapData(mapKey, diffNum, characteristic=characteristic)
 
-    for noteIndex, d in enumerate(infoData['_difficultyBeatmapSets']):
+    for i, d in enumerate(infoData['_difficultyBeatmapSets']):
         if d.get('_beatmapCharacteristicName') == characteristic:
-            charIndex = noteIndex
+            charIndex = i
             break
-    for noteIndex, d in enumerate(infoData['_difficultyBeatmapSets'][noteIndex]['_difficultyBeatmaps']):
+    for i, d in enumerate(infoData['_difficultyBeatmapSets'][i]['_difficultyBeatmaps']):
         if d.get('_difficultyRank') == diffNum:
-            diffIndex = noteIndex
+            diffIndex = i
             break
     
     metadata = {'bpm': infoData['_beatsPerMinute']}
