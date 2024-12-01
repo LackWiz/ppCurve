@@ -489,6 +489,75 @@ def calculateWallHitbox(xPos, yPos, width, distance, height):
     hitboxPos = {'p0': np.array([hitboxX1, hitboxY1, hitboxZ1]), 'p1': np.array([hitboxX2, hitboxY2, hitboxZ2])}
     return hitboxPos
 
+def calculateChainMaths(chainData):
+    distance = math.sqrt(math.pow((chainData['x'] - chainData['tx']), 2) + math.pow((chainData['y'] - chainData['ty']), 2))
+    chainStartPos = np.array([chainData['x'], chainData['y']])
+    chainEndPos = np.array([chainData['tx'], chainData['ty']])
+    midOffset = np.array([math.cos(math.radians(cut_direction_index[chainData['d']])), math.sin(math.radians(cut_direction_index[chainData['d']]))]) * distance / 2
+    midPoint = chainStartPos + midOffset
+    timeEnd = chainData['tb']
+    linkNum = chainData['sc'] - 1
+
+    linkPos = []
+    linkAngle = []
+
+    for j in range(1, chainData['sc']):
+        timeProgress = j / (chainData['sc'] - 1)
+
+        t = timeProgress * chainData['s']
+
+        linkPos.append(PointOnQuadBezier(chainStartPos, midPoint, chainEndPos, t))  # Save block position on the grid for conversion
+        linkAngle.append(AngleOnQuadBezier(chainStartPos, midPoint, chainEndPos, t))
+        # Calculate block swing strike position in meters and save.
+        linkPos[-1] = calcNoteHitbox(linkPos[-1], linkAngle[-1])
+
+    return linkNum, linkPos, linkAngle
+
+def noteAngleSnapping(noteGroup):   # Expects an array size of 2
+    # 3 cases. All involve only 2 notes. 
+    # Arrow note angle adjustment +-22.5°
+    # Dot note angle adjustment +-45°
+    # Case 0: All arrow notes       Only consider arrow notes if they're closly lined up already and facing the same direction
+    # Case 1: Arrow + dot note      Angle adjust arrow and dot note towards each other if dot note is in the general tragectory of the arrow note.
+    # Case 2: All dot notes         Angle adjust all dot notes.
+    
+    if len(noteGroup) != 2:
+        print("Note Angle Snapping Function error")
+        return
+
+    dotCount = 0
+    for forloop_note in noteGroup:    # Determine angle snap case
+        if forloop_note['d'] == 8:
+            dotCount += 1
+    
+    noteAngles = []
+    match dotCount:
+        case 0:
+            if noteGroup[0]['d'] == noteGroup[1]['d']:
+                noteAngle = cut_direction_index[noteGroup[0]['d']]
+
+                angleFromPosition = mod(math.degrees(math.atan2(noteGroup[0]['y'] - noteGroup[1]['y'], noteGroup[0]['x'] - noteGroup[1]['x'])), 360)
+                mirroredAngleFromPosition = mod(angleFromPosition + 180, 360)
+
+                if abs(noteAngle - angleFromPosition) <= 22.5:
+                    noteAngles.append(angleFromPosition)
+                    noteAngles.append(angleFromPosition)
+                
+                elif abs(noteAngle - mirroredAngleFromPosition) <= 22.5:
+                    noteAngles.append(mirroredAngleFromPosition)
+                    noteAngles.append(mirroredAngleFromPosition)
+
+                else:
+                    noteAngles.append(mod(cut_direction_index[noteGroup[0]['d']] + noteGroup[0]['a'], 360))
+                    noteAngles.append(mod(cut_direction_index[noteGroup[1]['d']] + noteGroup[1]['a'], 360))
+
+        case 1:
+            pass    #TODO finish
+        case 2:
+            pass    #TODO finish
+
+    return noteAngles
+
 def createNoteList(objectData: dict):
     # Purpose of the function is to prepare and condition note data
 
@@ -507,59 +576,64 @@ def createNoteList(objectData: dict):
     chains = objectData['chains']
     bindArcsToNotes(notes, arcs)        # Assigns pre/post angle required bool values to every note/chain
     bindChainsToNotes(notes, chains)
-    swingData = []
+    noteData = []
+    noteIndex = 0
 
-    for i in range(0, len(notes)):
-        cNote = notes[i]
-        isDot = False
-        blockAngle = cut_direction_index[cNote['d']] + cNote['a']       # Get block angle, including precision angle
-        if cNote['d'] == 8:
-            isDot = True
-           
-        hitboxPosData = calcNoteHitbox([cNote['x'], cNote['y']], blockAngle)     
-
-        swingBeginning = cNote['b']
+    while noteIndex < len(notes):
         
-        if not cNote['hasChain']:
-            swingEnd = swingBeginning
+        sameTime = []
+        sameTime.append(notes[noteIndex])
+        if noteIndex + 1 < len(notes) - 1:  # Check if array access is valid
+            while (notes[noteIndex]['b'] == notes[noteIndex + 1]['b']) and (noteIndex + 1 < len(notes) - 1):
+                noteIndex += 1
+                sameTime.append(notes[noteIndex])
+
+        groupedNotes = sameTime
+        noteAngles = []
+
+        if len(groupedNotes) != 2:      # Snap precision angle adjustment only happens with 2 notes.
+            for forloop_index in range(0, len(groupedNotes)):
+                if groupedNotes[forloop_index]['d'] == 8:
+                    isDot = True
+                    noteAngles.append(mod(groupedNotes[forloop_index]['a'], 360))
+                else:
+                    isDot = False
+                    noteAngles.append(mod(cut_direction_index[groupedNotes[forloop_index]['d']] + groupedNotes[forloop_index]['a'], 360))       # Get block angle, including precision angle
+
+        else:       # Multiple notes at the same time can alter note angles
+            noteAngles = noteAngleSnapping(groupedNotes)
+        
+        for groupNoteAnalysisIndex in range(0, len(groupedNotes)):
+
+            currentNote = groupedNotes[groupNoteAnalysisIndex]
+
+            hitboxPosData = calcNoteHitbox([currentNote['x'], currentNote['y']], noteAngles[groupNoteAnalysisIndex])     
+
+            timeStart = currentNote['b']
             
-        else:
-            distance = math.sqrt(math.pow((cNote['chainData']['x'] - cNote['chainData']['tx']), 2) + math.pow((cNote['chainData']['y'] - cNote['chainData']['ty']), 2))
-            chainStartPos = np.array([cNote['chainData']['x'], cNote['chainData']['y']])
-            chainEndPos = np.array([cNote['chainData']['tx'], cNote['chainData']['ty']])
-            midOffset = np.array([math.cos(math.radians(cut_direction_index[cNote['chainData']['d']])), math.sin(math.radians(cut_direction_index[cNote['chainData']['d']]))]) * distance / 2
-            midPoint = chainStartPos + midOffset
-            swingEnd = cNote['chainData']['tb']
-            linkNum = cNote['chainData']['sc'] - 1
+            if not currentNote['hasChain']:
+                timeEnd = timeStart
+                
+            else:
+                linkNum, linkPos, linkAngle = calculateChainMaths(currentNote['chainData'])
 
-            linkPos = []
-            linkAngle = []
+            noteData.append({})
+            # swingData[-1]['LRhand'] = handedness                            #Bool
+            noteData[-1]['isDot'] = isDot                                  #Bool
+            noteData[-1]['beat'] = timeStart                          #Float
+            noteData[-1]['beatF'] = timeEnd                               #Float
+            noteData[-1]['hitbox'] = hitboxPosData                         #Array of Vector3
+            noteData[-1]['noteAngle'] = noteAngles[groupNoteAnalysisIndex]                         #Vector3
+            noteData[-1]['preAngleDisabled'] = currentNote['preArc']             #Bool
+            noteData[-1]['postAngleDisabled'] = currentNote['postArc']           #Bool
+            noteData[-1]['hasChain'] = currentNote['hasChain']                   #Bool
+            if currentNote['hasChain']:
+                noteData[-1]['chainData'] = {'linkNum': linkNum, 'linkPos': linkPos, 'linkAngle': linkAngle}
 
-            for j in range(1, cNote['chainData']['sc']):
-                timeProgress = j / (cNote['chainData']['sc'] - 1)
+        noteIndex += 1
 
-                t = timeProgress * cNote['chainData']['s']
-
-                linkPos.append(PointOnQuadBezier(chainStartPos, midPoint, chainEndPos, t))  # Save block position on the grid for conversion
-                linkAngle.append(AngleOnQuadBezier(chainStartPos, midPoint, chainEndPos, t))
-                # Calculate block swing strike position in meters and save.
-                linkPos[-1] = calcNoteHitbox(linkPos[-1], linkAngle[-1])
-
-        swingData.append({})
-        # swingData[-1]['LRhand'] = handedness                            #Bool
-        swingData[-1]['isDot'] = isDot                                  #Bool
-        swingData[-1]['beat'] = swingBeginning                          #Float
-        swingData[-1]['beatF'] = swingEnd                               #Float
-        swingData[-1]['hitbox'] = hitboxPosData                         #Array of Vector3
-        swingData[-1]['noteAngle'] = blockAngle                         #Vector3
-        swingData[-1]['preAngleDisabled'] = cNote['preArc']             #Bool
-        swingData[-1]['postAngleDisabled'] = cNote['postArc']           #Bool
-        swingData[-1]['hasChain'] = cNote['hasChain']                   #Bool
-        if cNote['hasChain']:
-            swingData[-1]['chainData'] = {'linkNum': linkNum, 'linkPos': linkPos, 'linkAngle': linkAngle}
-
-    swingData = sorted(swingData, key=lambda d: d['beat'])  # Sort by time
-    return swingData
+    noteData = sorted(noteData, key=lambda d: d['beat'])  # Sort by time
+    return noteData
 
 def createBombList(bombs: list):
     bombData = []
@@ -793,8 +867,8 @@ def techOperations(B_mapData: dict, metadata: dict, isuser=True, verbose=True):
     B_RightNoteData = splitMapData(B_mapData, 1)
     B_BombData = splitMapData(B_mapData, 2)
     B_WallData = splitMapData(B_mapData, 3)
-    LeftNoteData = createNoteList(B_LeftNoteData, 0)    # Create extract object data with game mechanics
-    RightNoteData = createNoteList(B_RightNoteData, 1)
+    LeftNoteData = createNoteList(B_LeftNoteData)    # Create extract object data with game mechanics
+    RightNoteData = createNoteList(B_RightNoteData)
     BombData = createBombList(B_BombData)
     WallData = createWallList(B_WallData)
     if len(B_mapData['rotationEvents']) > 0:                # Apple rotation data if available
@@ -803,8 +877,8 @@ def techOperations(B_mapData: dict, metadata: dict, isuser=True, verbose=True):
         BombData = applyRotationData(BombData, B_mapData['rotationEvents'])
         WallData = applyRotationData(WallData, B_mapData['rotationEvents'])
 
-    LeftSwingPath = primarySwingPath(LeftNoteData, BombData, WallData, 0, B_mapData['rotationEvents'])
-    RightSwingPath = primarySwingPath(RightNoteData, BombData, WallData, 1, B_mapData['rotationEvents'])
+    LeftSwingPath = primarySwingPath(LeftNoteData, BombData, WallData, 0, 999, B_mapData['rotationEvents'])
+    RightSwingPath = primarySwingPath(RightNoteData, BombData, WallData, 1, 999, B_mapData['rotationEvents'])
     
     LeftSwingData = []
     RightSwingData = []
@@ -847,13 +921,13 @@ if __name__ == "__main__":
         print(f'autoloading {diffNum}')
     mapData = setup.loadMapData(mapKey, diffNum, characteristic=characteristic)
 
-    for i, d in enumerate(infoData['_difficultyBeatmapSets']):
+    for noteIndex, d in enumerate(infoData['_difficultyBeatmapSets']):
         if d.get('_beatmapCharacteristicName') == characteristic:
-            charIndex = i
+            charIndex = noteIndex
             break
-    for i, d in enumerate(infoData['_difficultyBeatmapSets'][i]['_difficultyBeatmaps']):
+    for noteIndex, d in enumerate(infoData['_difficultyBeatmapSets'][noteIndex]['_difficultyBeatmaps']):
         if d.get('_difficultyRank') == diffNum:
-            diffIndex = i
+            diffIndex = noteIndex
             break
     
     metadata = {'bpm': infoData['_beatsPerMinute']}
