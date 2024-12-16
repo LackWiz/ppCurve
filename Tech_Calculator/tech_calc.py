@@ -13,12 +13,13 @@ from collections import deque
 
 # All angles are in conventional mathimatical notations (positive angeles are counter-clockwise, 0° starts in the east direction)
 # Works for V2 - V3.3.0
+# All distances are in meters
 # Easy = 1, Normal = 3, Hard = 5, Expert = 7, Expert+ = 9
 # b = time, x and y = grid location from bottom left, a = angle offset, c = left or right respectively, d = direction
 cut_direction_index = [90, 270, 180, 0, 135, 45, 225, 315, 270]     # mathamatical 0°, direction of cut
 x_grid_distance = 0.43636   # In meters
 y_grid_distance = 0.525   # In meters, averaged 0.55m between bottom and middle row, 0.5m between middle and top row.
-#Bombs are roughly equal in size to note badcut hitboxes @ 0.36m
+# Bombs are roughly equal in size to note badcut hitboxes @ 0.36m
 bomb_offset = [[x_grid_distance / 2 - 0.18, y_grid_distance / 2 - 0.18, 1 - 0.18], [x_grid_distance / 2 + 0.18, y_grid_distance / 2 + 0.18, 1 + 0.18]]     
 saber_hit_distance = 0.5        # The z position where the hitbox will hit the saber. 0 = hilting, 0.5 = mid, 1 = tipping
 
@@ -209,7 +210,7 @@ def rotate_point(p0, center, pitch, yaw, roll):
     new_p0 = rotate_x(p0, center, pitch)
     new_p0 = rotate_y(new_p0, center, -yaw)
     new_p0 = rotate_z(new_p0, center, roll)
-    return new_p0
+    return np.array(new_p0)
 
 def combine_and_sort_list(array1, array2, key):
     combinedArray = array1 + array2
@@ -899,36 +900,137 @@ def calculate115(hitbox_pos, hitbox_angle, strike_angle):
 # During faster sections of song, the hand can't reach the note physically, so a small angle deviation will be magnified.
 # Instability at speed.
 
-def calculate_hit_pos():
-    pass
+# Use the block before and after to calculate the best position/angle. 
+# Weight the influence of the surrounding blocks by distance (closer has more influence)
+# Weight of the block to hit is 0.5, with the surrounding blocks sharing the other 0.5. How much the weight is split between them depends on their distances to the block to hit.
+# Arrow note block angle adjustment cannot exceed +-60°
+# Block position adjustment limitation are...
+def calculate_hit_pos(note_data, note_data_index):
+    group_weight = 0.5          # How much the surrounding 2 notes effects hand position
+    before_block_weight = 0.667
+    after_block_weight = 0.333
 
-def calculate_hit_angle():
-    pass
+    if note_data_index == 0:
+        block_0_pos = note_data[note_data_index]['hitbox']['pos_data']
+        block_1_pos = note_data[note_data_index]['hitbox']['pos_data']
+        block_2_pos = note_data[note_data_index + 1]['hitbox']['pos_data']
+
+        block_0_time = note_data[note_data_index]['beat']
+        block_1_time = note_data[note_data_index]['beat']
+        block_2_time = note_data[note_data_index + 1]['beat']
 
 
-def pos_pathing(start_point, end_point, skill_set):
+    elif note_data_index + 1 < len(note_data) - 1:
+        block_0_pos = note_data[note_data_index - 1]['hitbox']['pos_data']
+        block_1_pos = note_data[note_data_index]['hitbox']['pos_data']
+        block_2_pos = note_data[note_data_index + 1]['hitbox']['pos_data']
+
+        block_0_time = note_data[note_data_index - 1]['beat']
+        block_1_time = note_data[note_data_index]['beat']
+        block_2_time = note_data[note_data_index + 1]['beat']
+
+    else:
+        block_0_pos = note_data[note_data_index - 1]['hitbox']['pos_data']
+        block_1_pos = note_data[note_data_index]['hitbox']['pos_data']
+        block_2_pos = note_data[note_data_index]['hitbox']['pos_data']
+
+        block_0_time = note_data[note_data_index - 1]['beat']
+        block_1_time = note_data[note_data_index]['beat']
+        block_2_time = note_data[note_data_index]['beat']
+
+    note_gap = block_2_time - block_0_time
+
+    if note_gap == 0:
+        note_gap = 1e-6
+
+    block_0_weight = min(note_gap / max(block_1_time - block_0_time, 1e-6), 1) * group_weight * before_block_weight
+    block_1_weight = 1 - group_weight
+    block_2_weight = min(note_gap / max(block_2_time - block_1_time, 1e-6), 1) * group_weight * after_block_weight
+
+    hit_pos_p0 = block_0_pos['p0'] * block_0_weight + block_1_pos['p0'] * block_1_weight + block_2_pos['p0'] * block_2_weight
+    hit_pos_p1 = block_0_pos['p1'] * block_0_weight + block_1_pos['p1'] * block_1_weight + block_2_pos['p1'] * block_2_weight
+    
+    return {'p0': hit_pos_p0, 'p1': hit_pos_p1}
+
+def calculate_hit_angle(note_data, note_data_index, max_angle_change):
+    group_weight = 0.5          # How much the surrounding 2 notes effects hand position
+    before_block_weight = 0.667
+    after_block_weight = 0.333
+
+    if note_data_index == 0:
+        block_0_angle = note_data[note_data_index]['hitbox']['angle']
+        block_1_angle = note_data[note_data_index]['hitbox']['angle']
+        block_2_angle = note_data[note_data_index + 1]['hitbox']['angle']
+
+        block_0_time = note_data[note_data_index]['beat']
+        block_1_time = note_data[note_data_index]['beat']
+        block_2_time = note_data[note_data_index + 1]['beat']
+
+
+    elif note_data_index + 1 < len(note_data) - 1:
+        block_0_angle = note_data[note_data_index - 1]['hitbox']['angle']
+        block_1_angle = note_data[note_data_index]['hitbox']['angle']
+        block_2_angle = note_data[note_data_index + 1]['hitbox']['angle']
+
+        block_0_time = note_data[note_data_index - 1]['beat']
+        block_1_time = note_data[note_data_index]['beat']
+        block_2_time = note_data[note_data_index + 1]['beat']
+
+    else:
+        block_0_angle = note_data[note_data_index - 1]['hitbox']['angle']
+        block_1_angle = note_data[note_data_index]['hitbox']['angle']
+        block_2_angle = note_data[note_data_index]['hitbox']['angle']
+
+        block_0_time = note_data[note_data_index - 1]['beat']
+        block_1_time = note_data[note_data_index]['beat']
+        block_2_time = note_data[note_data_index]['beat']
+
+    note_gap = block_2_time - block_0_time
+
+    if note_gap == 0:
+        note_gap = 1e-6
+
+    block_0_weight = min(note_gap / max(block_1_time - block_0_time, 1e-6), 1) * group_weight * before_block_weight
+    block_1_weight = 1 - group_weight
+    block_2_weight = min(note_gap / max(block_2_time - block_1_time, 1e-6), 1) * group_weight * after_block_weight
+
+    hit_angle = block_0_angle * block_0_weight + block_1_angle * block_1_weight + block_2_angle * block_2_weight
+
+    if hit_angle - block_1_angle > max_angle_change:  # Cap maximum angle change to the beatsaber limits.
+        hit_angle = block_1_angle - max_angle_change
+    elif hit_angle - block_1_angle < -max_angle_change:
+        hit_angle = block_1_angle + max_angle_change
+
+    return hit_angle
+
+
+def pos_pathing(start_pos, end_pos, skill_set):
     pos_accel = skill_set['positionAcceleration']
     ang_accel = skill_set['angleAcceleration']
     average_acc = skill_set['accuracy']
     max_acceleration = skill_set
     min_resolution = 50
     max_gap = 0.05
+    starting_velocity = 0
+    ending_velocity = 0
 
-    advanced_s_curve_path(start_pos, end_pos, max_acceleration, minimum_resolution, maximum_gap, starting_velocity, ending_velocity)    # Need to run this twice, one for position and one for angles.
+    advanced_s_curve_path(start_pos, end_pos, max_acceleration, min_resolution, max_gap, starting_velocity, ending_velocity)    # Need to run this twice, one for position and one for angles.
 
 def angle_pathing():
     pass
 
-def bomb_pathing(swing_path, bomb_data):
-    pass
-
-def path_analysis(path):
+# Needs to modify swing path positioning to avoid bombs and wrong notes
+def badcut_pathing(swing_path, wrong_color_note_data, bomb_data):
     pass
 
 def vision_analysis(path):
     pass
 
-def swing_path(note_data, bomb_data, wall_data, handedness, skill_set, rotationData = []):
+def path_analysis(path):
+    vision_analysis(path)
+    pass
+
+def swing_path(note_data, other_note_data, bomb_data, wall_data, handedness, skill_set, rotationData = []):
     accGraph = [[]]
     averageAcc = 0.0    # The acc
     readibility = 0.0   # How much vision block
@@ -938,27 +1040,23 @@ def swing_path(note_data, bomb_data, wall_data, handedness, skill_set, rotationD
     
     noramlity = 0.0     # How common the pattern is
 
-    if handedness == 0:                                                 # X, Y, and Z coordinates in meters
-        h_pos = np.array([1.5 * x_grid_distance, 1.5 * y_grid_distance, -saber_hit_distance])     # Left 
-    else:
-        h_pos = np.array([2.5 * x_grid_distance, 1.5 * y_grid_distance, -saber_hit_distance])     # Right
+    
     
     note_path = []
 
-    for noteDataIndex in range(0, len(note_data)):
+    for note_data_index in range(0, len(note_data)):
         
-
-        start_pos, end_pos = calculate_hit_pos()                            # Find hand positions for swing
-        start_angle, end_angle = calculate_hit_angle()                      # Find angles for swing
-
-        basic_note_path = pos_pathing(start_pos, end_pos, skill_set)       # Find path between notes
-        basic_angle_path = angle_pathing
+        hit_pos = calculate_hit_pos(note_data, note_data_index)                            # Find hand positions for swing
+        hit_angle = calculate_hit_angle(note_data, note_data_index, 60)                      # Find angles for swing
 
         note_path.append({})
 
-        note_path[-1]['path_data'] = bomb_pathing(note_path, bomb_data)         # Adjust path to avoid bombs
+        note_path[-1]['basic_pos_path'] = pos_pathing(start_pos, end_pos, skill_set)       # Find path between notes
+        note_path[-1]['basic_angle_path'] = angle_pathing
 
-        note_path[-1]['path_analysis'] = path_analysis(note_path['path_data'])  # Analyse scoring metrics
+        note_path[-1]['path_data'] = badcut_pathing(note_path[-1], other_note_data, bomb_data)         # Adjust path to avoid bombs
+
+        note_path[-1]['path_analysis'] = path_analysis(note_path[-1]['path_data'])  # Analyse scoring metrics
 
     for note_path_index in range(0, len(note_path)):
         readibility = vision_analysis
@@ -966,13 +1064,13 @@ def swing_path(note_data, bomb_data, wall_data, handedness, skill_set, rotationD
     return accGraph
 
 
-def difficultyAnalysis(noteData, bombData, wallData, handedness, rotationData = []):
+def difficultyAnalysis(noteData, other_note_data, bombData, wallData, handedness, rotationData = []):
     skillList = []      # positionAcceleration m/s^2, angleAcceleration °/s^2, accuracy in average acc
     skillList.append({'positionAcceleration': 4294967295, 'angleAcceleration': 4294967295, 'accuracy': 15})
     skillList.append({'positionAcceleration': 100, 'angleAcceleration': 3600, 'accuracy': 10})
 
     for skillListIndex in range(0, len(skillList)):
-        skillList[skillListIndex]['swingPathReturn'] = swing_path(noteData, bombData, wallData, handedness, skillList[skillListIndex], rotationData)
+        skillList[skillListIndex]['swingPathReturn'] = swing_path(noteData, other_note_data, bombData, wallData, handedness, skillList[skillListIndex], rotationData)
 
     return skillList
 
