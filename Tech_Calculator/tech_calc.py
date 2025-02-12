@@ -22,7 +22,8 @@ y_grid_distance = 0.525   # In meters, averaged 0.55m between bottom and middle 
 # Bombs are roughly equal in size to note badcut hitboxes @ 0.36m
 bomb_offset = [[x_grid_distance / 2 - 0.18, y_grid_distance / 2 - 0.18, 1 - 0.18], [x_grid_distance / 2 + 0.18, y_grid_distance / 2 + 0.18, 1 + 0.18]]     
 saber_hit_distance = 0.5        # The z position where the hitbox will hit the saber. 0 = hilting, 0.5 = mid, 1 = tipping
-
+refresh_rate = 120              # Simulated refreshrate. Defines the simulation precision
+search_frequency = 64
 # ------------------------ Base functions ------------------------
 
 def average(lst, set_len=0):  # Returns the averate of a list of integers
@@ -537,19 +538,57 @@ def calc_note_hitbox(block_position, block_angle):
     z_ang = block_angle
 
     # Initialize point positions for hitbox caluclations in world space
-    p0 = np.array([0, 0, 0.15])         # front left corner 
-    p1 = np.array([0.8, 0.5, 1.15])     # back right corner
-    center = np.array([0.4, 0.25, 1])   # center of cube 
+    p0 = np.array([0 + block_position[0] * x_grid_distance, 0 + block_position[1] * y_grid_distance, 0.15])         # front left corner 
+    p1 = np.array([0.8 + block_position[0] * x_grid_distance, 0.5 + block_position[1] * y_grid_distance, 1.15])     # back right corner
+    center = np.array([0.4 + block_position[0] * x_grid_distance, 0.25 + block_position[1] * y_grid_distance, 1])   # center of cube 
     
     # Apply rotation transformes
     rotated_p0 = rotate_point(p0, center, x_ang, y_ang, z_ang)
     rotated_p1 = rotate_point(p1, center, x_ang, y_ang, z_ang)
     
     # Apply grid positioning
-    x0_pos = block_position[0] * x_grid_distance + rotated_p0[0]
-    x1_pos = block_position[0] * x_grid_distance + rotated_p1[0]
-    y0_pos = block_position[1] * y_grid_distance + rotated_p0[1]
-    y1_pos = block_position[1] * y_grid_distance + rotated_p1[1]
+    x0_pos = rotated_p0[0]
+    x1_pos = rotated_p1[0]
+    y0_pos = rotated_p0[1]
+    y1_pos = rotated_p1[1]
+    z0_pos = rotated_p0[2]
+    z1_pos = rotated_p1[2]
+    
+    hitbox['p0'] = np.array([x0_pos, y0_pos, z0_pos])
+    hitbox['p1'] = np.array([x1_pos, y1_pos, z1_pos])
+    angle = np.array([x_ang, y_ang, z_ang])
+    
+    block_data = {'pos_data' : hitbox, 'angle': angle}
+
+    visbox_data = calc_note_visbox(block_position, block_angle)
+
+    return block_data, visbox_data
+
+def calc_note_visbox(block_position, block_angle):
+    # Same thing as the above function but only the visable portion of the note
+
+    hitbox = {'p0': {}, 'p1': {}}
+
+    x_note_pos_relative_to_center = (block_position[0] + 0.5 - 2) * x_grid_distance        # Calculate the xCoordinates relative to the middle of the world.
+
+    x_ang = 0            # Pitch, Yaw, Roll
+    y_ang = np.arccos(x_note_pos_relative_to_center / (saber_hit_distance + 0.85))    #  saber length + 0.85 forward z hitbox. 0° is straight forwards, +angle is CC, -angle is clockwise.
+    z_ang = block_angle
+
+    # Initialize point positions for visbox caluclations in world space with dimentions x = 0.47m, y = 0.47m, z = 0.4m. Can simplify later for speed
+    p0 = np.array([(block_position[0] + 0.5) * x_grid_distance - 0.47 / 2,(block_position[1] + 0.5) * y_grid_distance - 0.47 / 2, 1 - 0.2])         # front left corner 
+    p1 = np.array([(block_position[0] + 0.5) * x_grid_distance + 0.47 / 2,(block_position[1] + 0.5) * y_grid_distance + 0.47 / 2, 1 + 0.2])     # back right corner
+    center = np.array([0.4 + block_position[0] * x_grid_distance, 0.25 + block_position[1] * y_grid_distance, 1])   # center of cube 
+    
+    # Apply rotation transformes
+    rotated_p0 = rotate_point(p0, center, x_ang, y_ang, z_ang)
+    rotated_p1 = rotate_point(p1, center, x_ang, y_ang, z_ang)
+    
+    # Apply grid positioning
+    x0_pos = rotated_p0[0]
+    x1_pos = rotated_p1[0]
+    y0_pos = rotated_p0[1]
+    y1_pos = rotated_p1[1]
     z0_pos = rotated_p0[2]
     z1_pos = rotated_p1[2]
     
@@ -570,19 +609,24 @@ def calculate_bomb_hitbox(b_pos: list):
     hitbox_z1 = bomb_offset[1][2]
 
     hitbox = {'p0': np.array([hitbox_x0, hitbox_y0, hitbox_z0]), 'p1': np.array([hitbox_x1, hitbox_y1, hitbox_z1])}
-    return hitbox
+    visbox = {'p0': np.array([hitbox_x0, hitbox_y0, hitbox_z0]), 'p1': np.array([hitbox_x1, hitbox_y1, hitbox_z1])}     # temp, good approximation for now
+    return hitbox, visbox
 
 def calculate_wall_hitbox(x_pos, y_Pos, width, distance, height):
     hitbox_x0 = x_pos * x_grid_distance
     hitbox_y0 = y_Pos * y_grid_distance
-    # hitboxZ1 = -0.25                          # Need to verify: Subtract 0.25 to make front face of wall line up with front face of note (walls just built like that) (cred: arcViewer)
+    # hitboxZ1 = -0.25                          
     hitbox_z0 = 1                                
     hitbox_x1 = (x_pos + width) * x_grid_distance
     hitbox_y1 = (y_Pos + height) * y_grid_distance
     hitbox_z1 = distance * metadata['njs'] + 1
 
     hitboxPos = {'p0': np.array([hitbox_x0, hitbox_y0, hitbox_z0]), 'p1': np.array([hitbox_x1, hitbox_y1, hitbox_z1])}
-    return hitboxPos
+
+    visboxPos = {'p0': np.array([hitbox_x0, hitbox_y0, hitbox_z0 - 0.25]), 'p1': np.array([hitbox_x1, hitbox_y1, hitbox_z1])}   # Subtract 0.25 cause the visible portion of walls just built like that (cred: arcViewer)
+
+
+    return hitboxPos, visboxPos
 
 def chain_curve(chain_data):
     distance = math.sqrt(math.pow((chain_data['x'] - chain_data['tx']), 2) + math.pow((chain_data['y'] - chain_data['ty']), 2))
@@ -730,7 +774,7 @@ def create_note_list(object_data: dict):
 
             current_note = grouped_notes[grouped_note_index]
 
-            hitbox_pos_data = calc_note_hitbox([current_note['x'], current_note['y']], note_angles[grouped_note_index])     
+            hitbox_pos_data, visbox_pos_data = calc_note_hitbox([current_note['x'], current_note['y']], note_angles[grouped_note_index])     
 
             time_start = current_note['b']
             
@@ -744,6 +788,7 @@ def create_note_list(object_data: dict):
             note_data[-1]['is_dot'] = is_dot                                  #Bool
             note_data[-1]['beat'] = time_start                          #Float
             note_data[-1]['hitbox'] = hitbox_pos_data                         #Array of Vector3
+            note_data[-1]['visbox'] = visbox_pos_data
             note_data[-1]['note_angle'] = note_angles[grouped_note_index]                         #Vector3
             note_data[-1]['pre_angle_disabled'] = current_note['pre_arc']             #Bool
             note_data[-1]['post_angle_disabled'] = current_note['post_arc']           #Bool
@@ -773,10 +818,13 @@ def create_bomb_list(bombs: list):
         bomb_data.append({})
         bomb_data[-1]['beat'] = same_time[0]['b']
 
-        bomb_data[-1]['hitbox'] = {'pos_data': []}        
+        bomb_data[-1]['hitbox'] = {'pos_data': []}
+        bomb_data[-1]['visbox'] = {'pos_data': []}
         for j in range(0, len(same_time)):
             bomb_pos = [same_time[j]['x'], same_time[j]['y']]
-            bomb_data[-1]['hitbox']['pos_data'].append(calculate_bomb_hitbox(bomb_pos))     # We will approximate bombs to be cubes.
+            pos_data, vis_data = calculate_bomb_hitbox(bomb_pos)
+            bomb_data[-1]['hitbox']['pos_data'].append(pos_data)     # We will approximate bombs to be cubes.
+            bomb_data[-1]['visbox']['pos_data'].append(vis_data)
 
         bomb_index += 1
     
@@ -798,11 +846,15 @@ def create_wall_list(walls: list):
         
         wall_data.append({})     # Initialize new entry
         wall_data[-1]['beat'] = same_time[0]['b']
-        wall_data[-1]['hitbox'] = {'pos_data': []}      # We will approximate bombs to be cubes instead of sphears for speed.
+        wall_data[-1]['hitbox'] = {}      # We will approximate bombs to be cubes instead of sphears for speed.
+        wall_data[-1]['visbox'] = {}
         
         for j in range(0, len(same_time)):
-            wall_data[-1]['hitbox']['pos_data'].append(calculate_wall_hitbox(same_time[j]['x'], same_time[j]['y'], same_time[j]['w'], same_time[j]['d'], same_time[j]['h']))
-            wall_data[-1]['hitbox']['pos_data'][-1]['length_seconds'] = beats_to_seconds(same_time[j]['d'], metadata['bpm'])
+            hitbox_data, visbox_data = calculate_wall_hitbox(same_time[j]['x'], same_time[j]['y'], same_time[j]['w'], same_time[j]['d'], same_time[j]['h'])
+            wall_data[-1]['hitbox']['pos_data'] = hitbox_data
+            wall_data[-1]['hitbox']['pos_data']['length_seconds'] = beats_to_seconds(same_time[j]['d'], metadata['bpm'])
+            wall_data[-1]['hitbox']['pos_data']['angle'] = np.array([0, 0, 0])
+            wall_data[-1]['visbox']['pos_data'] = visbox_data
 
         wall_index += 1
     
@@ -853,14 +905,102 @@ def apply_rotation_data(object_data, rotation_data=[]):
                 # Rotation must be inverted to convert between mathimatical and beatsaber rotation orientation
                 object_data[i]['hitbox']['pos_data'][pos_index]['p0'] = rotate_point(p0, center, 0, -rotation, 0)
                 object_data[i]['hitbox']['pos_data'][pos_index]['p1'] = rotate_point(p1, center, 0, -rotation, 0)
+                object_data[i]['lane_rotation'] = mod(-rotation, 360)
         else:
             p0 = object_data[i]['hitbox']['pos_data']['p0']
             p1 = object_data[i]['hitbox']['pos_data']['p1']
             center = np.array([0,0,0])
             object_data[i]['hitbox']['pos_data']['p0'] = rotate_point(p0, center, 0, -rotation, 0)
             object_data[i]['hitbox']['pos_data']['p1'] = rotate_point(p1, center, 0, -rotation, 0)
+            object_data[i]['lane_rotation'] = mod(-rotation, 360)
     
     return object_data
+
+# object_data: accepts the formatted_data format
+def objects_within_range(object_data, time, partial_matching=True, true_for_range_in_seconds=False, time_range=1, key='beat', ignore_within_saber_distance=False):
+
+    first_object_time = object_data[0][key]
+    last_object_time = object_data[-1][key]
+
+    if true_for_range_in_seconds:
+        time_range = time_range * metadata['bpm'] / 60
+
+    if time - time_range > last_object_time:    # If there's no objects around the requested time within range, then there's no data of interest.
+        return []
+    
+    if time + time_range < first_object_time:
+        return []
+    
+    object_data_length = len(object_data)       # Setup search parameters
+    search_depth = np.round(object_data_length / search_frequency)    # Use a number to ensure square root properties. Maybe switch to a square root method insead of 32
+    
+    if search_depth >= 1:
+        search_count = 0
+        search_index = int(np.round(object_data_length / 2))
+        
+    while search_depth > search_count:      # Use division to quickly but roughly locate the correct index
+
+        if object_data[search_index][key] < time:
+            new_search_index = int(np.round(search_index + search_index / 2))
+
+        if object_data[search_index][key] > time:
+            new_search_index = int(np.round(search_index - search_index / 2))
+
+        search_index = new_search_index
+
+        min(search_index, object_data_length - 1)   # Clamp the search index to within accessable memory
+        max(search_index, 0)
+
+        if abs(object_data[search_index][key] - time) <= time_range:     # Lucky, we're within range, good enough to break out of this loop early
+            break
+
+        search_count += 1
+
+    index_start = int(search_index) # Find the starting index to define relavent index points on the object list
+
+    if ignore_within_saber_distance:
+        distance_from_note_time_in_beats = distance_to_beats(metadata['bpm'], metadata['njs'], saber_hit_distance)  # 0m = hilting, 1m = tipping
+        lower_bound = time - distance_from_note_time_in_beats
+    else:
+        lower_bound = time - time_range
+
+    if object_data[index_start][key] < time:             # In case the index start point starts behind the time variable, bring it ahead for the next while loop.
+        while object_data[index_start][key] < time:
+            index_start += 1
+            if index_start >= object_data_length - 1:
+                break
+    while object_data[index_start - 1][key] > lower_bound:     # While the index time is greater than the lower bound
+        index_start -= 1
+        if index_start == 0:
+            break
+
+    index_end = int(search_index)
+    
+    if object_data[index_end][key] > time:             # In case the index end point starts ahead the time variable, bring it back for the next while loop.
+        while object_data[index_end][key] > time:
+            if index_end > 0:
+                index_end -= 1
+            else:
+                break
+    while object_data[index_end + 1][key] < time - time_range:     
+        index_end += 1
+        if index_end >= object_data_length - 1:
+            break
+
+    # Verify that all objects are within range (might be commented out later)
+    object_return = []
+    for verification in range(index_start-4, index_end + 1+4):
+        if abs(object_data[verification][key] - time) <= time_range:
+            object_return.append(object_data[verification])
+        else:
+            print(f"Object at index {verification} is out of range")
+    
+    
+    return object_return
+
+
+
+
 
 # ------------------------ Algo specific functions ------------------------
 # TODO: Finish
@@ -884,6 +1024,13 @@ def calculate115(hitbox_pos, hitbox_angle, strike_angle):
     # rotated_strikePos = rotatePoint(initStrikePos, center, hitboxAngle[0], hitboxAngle[1], hitboxAngle[2])
     return strike_pos
 
+def define_head_pos(wall_data, bomb_data, rotation_data):
+
+
+
+    pass
+
+
 # 2 ways to do this.
 # 1.    Run this function multiple times for various skill levels (25, 50, 100, 200, 300, 400, 500, 600, 700, 800, 900, 1000pp) (slow, but simple)
 #           Determine the perfect optimal path, then smooth through acceleration limits and introduce noise along path to simulate lower skill levels
@@ -905,103 +1052,15 @@ def calculate115(hitbox_pos, hitbox_angle, strike_angle):
 # Weight of the block to hit is 0.5, with the surrounding blocks sharing the other 0.5. How much the weight is split between them depends on their distances to the block to hit.
 # Arrow note block angle adjustment cannot exceed +-60°
 # Block position adjustment limitation are...
-def calculate_hit_pos(note_data, note_data_index):
-    group_weight = 0.5          # How much the surrounding 2 notes effects hand position
-    before_block_weight = 0.667
-    after_block_weight = 0.333
-
-    if note_data_index == 0:
-        block_0_pos = note_data[note_data_index]['hitbox']['pos_data']
-        block_1_pos = note_data[note_data_index]['hitbox']['pos_data']
-        block_2_pos = note_data[note_data_index + 1]['hitbox']['pos_data']
-
-        block_0_time = note_data[note_data_index]['beat']
-        block_1_time = note_data[note_data_index]['beat']
-        block_2_time = note_data[note_data_index + 1]['beat']
-
-
-    elif note_data_index + 1 < len(note_data) - 1:
-        block_0_pos = note_data[note_data_index - 1]['hitbox']['pos_data']
-        block_1_pos = note_data[note_data_index]['hitbox']['pos_data']
-        block_2_pos = note_data[note_data_index + 1]['hitbox']['pos_data']
-
-        block_0_time = note_data[note_data_index - 1]['beat']
-        block_1_time = note_data[note_data_index]['beat']
-        block_2_time = note_data[note_data_index + 1]['beat']
-
-    else:
-        block_0_pos = note_data[note_data_index - 1]['hitbox']['pos_data']
-        block_1_pos = note_data[note_data_index]['hitbox']['pos_data']
-        block_2_pos = note_data[note_data_index]['hitbox']['pos_data']
-
-        block_0_time = note_data[note_data_index - 1]['beat']
-        block_1_time = note_data[note_data_index]['beat']
-        block_2_time = note_data[note_data_index]['beat']
-
-    note_gap = block_2_time - block_0_time
-
-    if note_gap == 0:
-        note_gap = 1e-6
-
-    block_0_weight = min(note_gap / max(block_1_time - block_0_time, 1e-6), 1) * group_weight * before_block_weight
-    block_1_weight = 1 - group_weight
-    block_2_weight = min(note_gap / max(block_2_time - block_1_time, 1e-6), 1) * group_weight * after_block_weight
-
-    hit_pos_p0 = block_0_pos['p0'] * block_0_weight + block_1_pos['p0'] * block_1_weight + block_2_pos['p0'] * block_2_weight
-    hit_pos_p1 = block_0_pos['p1'] * block_0_weight + block_1_pos['p1'] * block_1_weight + block_2_pos['p1'] * block_2_weight
+def target_hit_data(note_data, note_data_index):
+    hand_pos = np.array([])
     
-    return {'p0': hit_pos_p0, 'p1': hit_pos_p1}
-
-def calculate_hit_angle(note_data, note_data_index, max_angle_change):
-    group_weight = 0.5          # How much the surrounding 2 notes effects hand position
-    before_block_weight = 0.667
-    after_block_weight = 0.333
-
-    if note_data_index == 0:
-        block_0_angle = note_data[note_data_index]['hitbox']['angle']
-        block_1_angle = note_data[note_data_index]['hitbox']['angle']
-        block_2_angle = note_data[note_data_index + 1]['hitbox']['angle']
-
-        block_0_time = note_data[note_data_index]['beat']
-        block_1_time = note_data[note_data_index]['beat']
-        block_2_time = note_data[note_data_index + 1]['beat']
 
 
-    elif note_data_index + 1 < len(note_data) - 1:
-        block_0_angle = note_data[note_data_index - 1]['hitbox']['angle']
-        block_1_angle = note_data[note_data_index]['hitbox']['angle']
-        block_2_angle = note_data[note_data_index + 1]['hitbox']['angle']
 
-        block_0_time = note_data[note_data_index - 1]['beat']
-        block_1_time = note_data[note_data_index]['beat']
-        block_2_time = note_data[note_data_index + 1]['beat']
 
-    else:
-        block_0_angle = note_data[note_data_index - 1]['hitbox']['angle']
-        block_1_angle = note_data[note_data_index]['hitbox']['angle']
-        block_2_angle = note_data[note_data_index]['hitbox']['angle']
-
-        block_0_time = note_data[note_data_index - 1]['beat']
-        block_1_time = note_data[note_data_index]['beat']
-        block_2_time = note_data[note_data_index]['beat']
-
-    note_gap = block_2_time - block_0_time
-
-    if note_gap == 0:
-        note_gap = 1e-6
-
-    block_0_weight = min(note_gap / max(block_1_time - block_0_time, 1e-6), 1) * group_weight * before_block_weight
-    block_1_weight = 1 - group_weight
-    block_2_weight = min(note_gap / max(block_2_time - block_1_time, 1e-6), 1) * group_weight * after_block_weight
-
-    hit_angle = block_0_angle * block_0_weight + block_1_angle * block_1_weight + block_2_angle * block_2_weight
-
-    if hit_angle - block_1_angle > max_angle_change:  # Cap maximum angle change to the beatsaber limits.
-        hit_angle = block_1_angle - max_angle_change
-    elif hit_angle - block_1_angle < -max_angle_change:
-        hit_angle = block_1_angle + max_angle_change
-
-    return hit_angle
+    
+    return -1
 
 
 def pos_pathing(start_pos, end_pos, skill_set):
@@ -1030,7 +1089,24 @@ def path_analysis(path):
     vision_analysis(path)
     pass
 
-def swing_path(note_data, other_note_data, bomb_data, wall_data, handedness, skill_set, rotationData = []):
+def swing_path(formatted_map_data, handedness, skill_set):
+    if handedness:
+        note_data = formatted_map_data['left_note_data']
+        other_note_data = formatted_map_data['right_note_data']
+    else:
+        note_data = formatted_map_data['right_note_data']
+        other_note_data = formatted_map_data['left_note_data']
+    
+    bomb_data = formatted_map_data['bomb_data']
+    wall_data = formatted_map_data['wall_data']
+    metadata = formatted_map_data['metadata']
+    rotationData = formatted_map_data['rotation_events']
+    
+    
+    
+    
+    
+    
     accGraph = [[]]
     averageAcc = 0.0    # The acc
     readibility = 0.0   # How much vision block
@@ -1040,37 +1116,61 @@ def swing_path(note_data, other_note_data, bomb_data, wall_data, handedness, ski
     
     noramlity = 0.0     # How common the pattern is
 
-    
-    
-    note_path = []
+    head_path = []
 
-    for note_data_index in range(0, len(note_data)):
+    time_step = 1 / refresh_rate * metadata['bpm'] / 60
+
+    time_beats = 0
+    last_object = max(note_data[-1]['beat'], other_note_data[-1]['beat'], bomb_data[-1]['beat'], wall_data[-1]['beat'])
+
+    
+    while time_beats < last_object:
+        nearby_objects = []
+
+        notes_of_interest = objects_within_range(note_data, time_beats, true_for_range_in_seconds=True, time_range=1, ignore_within_saber_distance=True)
+        bombs_of_interest = objects_within_range(bomb_data, time_beats, true_for_range_in_seconds=True, time_range=1)
+        walls_of_interest = objects_within_range(wall_data, time_beats, true_for_range_in_seconds=True, time_range=1)
+
+
+        time_beats += time_step
+    
+    
+    # note_path = []
+    
+    # for note_data_index in range(0, len(note_data)):
+
+    #     if note_data_index == 0:
+    #         start_pos = (note_data[note_data_index]['hitbox']['pos_data']['p0'] + note_data[note_data_index]['hitbox']['pos_data']['p1']) / 2
+    #     else:
+    #         start_pos = (note_data[note_data_index - 1]['hitbox']['pos_data']['p0'] + note_data[note_data_index - 1]['hitbox']['pos_data']['p1']) / 2
         
-        hit_pos = calculate_hit_pos(note_data, note_data_index)                            # Find hand positions for swing
-        hit_angle = calculate_hit_angle(note_data, note_data_index, 60)                      # Find angles for swing
+    #     note_path.append({})
 
-        note_path.append({})
+    #     head_pos = define_head_pos()
+    #     note_path[-1]['target_hit_pos'] = target_hit_data(note_data, note_data_index)                            # Find target hand position for swing
 
-        note_path[-1]['basic_pos_path'] = pos_pathing(start_pos, end_pos, skill_set)       # Find path between notes
-        note_path[-1]['basic_angle_path'] = angle_pathing
 
-        note_path[-1]['path_data'] = badcut_pathing(note_path[-1], other_note_data, bomb_data)         # Adjust path to avoid bombs
 
-        note_path[-1]['path_analysis'] = path_analysis(note_path[-1]['path_data'])  # Analyse scoring metrics
+    #     note_path[-1]['basic_pos_path'] = pos_pathing(start_pos, note_path[-1]['hit_pos'], skill_set)       # Build basic path from last note to current note
+    #     note_path[-1]['basic_angle_path'] = angle_pathing()
 
-    for note_path_index in range(0, len(note_path)):
-        readibility = vision_analysis
+    #     note_path[-1]['path_data'] = badcut_pathing(note_path[-1], other_note_data, bomb_data)         # Adjust path to avoid bombs
+
+    #     note_path[-1]['path_analysis'] = path_analysis(note_path[-1]['path_data'])  # Analyse scoring metrics
+
+    # for note_path_index in range(0, len(note_path)):
+    #     readibility = vision_analysis
 
     return accGraph
 
 
-def difficultyAnalysis(noteData, other_note_data, bombData, wallData, handedness, rotationData = []):
+def difficulty_analysis(formatted_map_data, handedness):
     skillList = []      # positionAcceleration m/s^2, angleAcceleration °/s^2, accuracy in average acc
-    skillList.append({'positionAcceleration': 4294967295, 'angleAcceleration': 4294967295, 'accuracy': 15})
-    skillList.append({'positionAcceleration': 100, 'angleAcceleration': 3600, 'accuracy': 10})
+    # skillList.append({'positionAcceleration': 4294967295, 'angleAcceleration': 4294967295, 'accuracy': 15})
+    skillList.append({'positionAcceleration': 100, 'angleAcceleration': 3600, 'accuracy': 15})
 
     for skillListIndex in range(0, len(skillList)):
-        skillList[skillListIndex]['swingPathReturn'] = swing_path(noteData, other_note_data, bombData, wallData, handedness, skillList[skillListIndex], rotationData)
+        skillList[skillListIndex]['swingPathReturn'] = swing_path(formatted_map_data, handedness, skillList[skillListIndex])
 
     return skillList
 
@@ -1083,18 +1183,26 @@ def techOperations(B_mapData: dict, metadata: dict, isuser=True, verbose=True):
     B_RightNoteData = split_map_data(B_mapData, 1)
     B_BombData = split_map_data(B_mapData, 2)
     B_WallData = split_map_data(B_mapData, 3)
-    LeftNoteData = create_note_list(B_LeftNoteData)    # Create extract object data with game mechanics
-    RightNoteData = create_note_list(B_RightNoteData)
-    BombData = create_bomb_list(B_BombData)
-    WallData = create_wall_list(B_WallData)
-    if len(B_mapData['rotationEvents']) > 0:                # Apple rotation data if available
-        LeftNoteData = apply_rotation_data(LeftNoteData, B_mapData['rotationEvents'])
-        RightNoteData = apply_rotation_data(RightNoteData, B_mapData['rotationEvents'])
-        BombData = apply_rotation_data(BombData, B_mapData['rotationEvents'])
-        WallData = apply_rotation_data(WallData, B_mapData['rotationEvents'])
+    left_note_data = create_note_list(B_LeftNoteData)    # Create extract object data with game mechanics
+    right_note_data = create_note_list(B_RightNoteData)
+    bomb_data = create_bomb_list(B_BombData)
+    wall_data = create_wall_list(B_WallData)
+    
+    left_note_data = apply_rotation_data(left_note_data, B_mapData['rotationEvents'])
+    right_note_data = apply_rotation_data(right_note_data, B_mapData['rotationEvents'])
+    bomb_data = apply_rotation_data(bomb_data, B_mapData['rotationEvents'])
+    wall_data = apply_rotation_data(wall_data, B_mapData['rotationEvents'])
 
-    left_results = difficultyAnalysis(LeftNoteData, BombData, WallData, 0, B_mapData['rotationEvents'])
-    right_results = difficultyAnalysis(RightNoteData, BombData, WallData, 1, B_mapData['rotationEvents'])
+    formatted_map_data = {}
+    formatted_map_data['left_note_data'] = left_note_data
+    formatted_map_data['right_note_data'] = right_note_data
+    formatted_map_data['bomb_data'] = bomb_data
+    formatted_map_data['wall_data'] = wall_data
+    formatted_map_data['metadata'] = metadata
+    formatted_map_data['rotation_events'] = B_mapData['rotationEvents']
+
+    left_results = difficulty_analysis(formatted_map_data, 0)
+    right_results = difficulty_analysis(formatted_map_data, 1)
     
     LeftSwingData = []
     RightSwingData = []
