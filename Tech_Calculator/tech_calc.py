@@ -362,25 +362,6 @@ def split_map_data(map_data: dict, left_or_right):  # False or 0 = Left, True or
             block_list = [wall for wall in map_data['obstacles']]
     return block_list
 
-def calculate_JD(bpm, njs, offset):
-    halfjump = 4
-    num = 60 / bpm
-    
-    if njs <= 0.01:
-        njs = 10
-    
-    while (njs * num * halfjump > 18):
-        halfjump /= 2
-
-    halfjump += offset
-
-    if halfjump < 0.25:
-        halfjump = 0.25
-
-    jumpdistance = njs * num * halfjump * 2
-
-    return jumpdistance
-
 def distance_to_beats(bpm, njs, distance):
     time = distance / njs
     beats = time * bpm / 60
@@ -517,6 +498,26 @@ def bind_chains_to_notes(note_data, chain_data):
                 break
 
     return
+
+def calculate_half_jump_duration(note_jump_speed, start_beat_offset, bpm):
+    half_jump_duration = 4
+    seconds_per_beat = 60 / bpm
+
+    while note_jump_speed * seconds_per_beat * half_jump_duration > 17.999:
+        half_jump_duration /= 2
+
+    half_jump_duration += start_beat_offset
+
+    if half_jump_duration < 0.25:
+        half_jump_duration = 0.25 
+
+    return half_jump_duration
+
+def caculate_jump_distance(note_jump_speed, start_beat_offset, bpm):
+    seconds_per_beat = 60 / bpm
+    return calculate_half_jump_duration(note_jump_speed, start_beat_offset, bpm) * seconds_per_beat * note_jump_speed * 2
+
+
 # Base block calculations
 
 # Calculates the entry point of a swing given block position, block angle, and swing angle.
@@ -917,8 +918,12 @@ def apply_rotation_data(object_data, rotation_data=[]):
     return object_data
 
 # object_data: accepts the formatted_data format
-def objects_within_range(object_data, time, partial_matching=True, true_for_range_in_seconds=False, time_range=1, key='beat', ignore_within_saber_distance=False):
+# I know partial_matching was supposed to be something, but I can't remember...
+def objects_within_range(object_data, time, partial_matching=True, true_for_range_in_seconds=False, time_range=1, key='beat', ignore_within_saber_distance=False, return_indexs=False):
 
+    if len(object_data) == 0:
+        return []
+    
     first_object_time = object_data[0][key]
     last_object_time = object_data[-1][key]
 
@@ -959,10 +964,11 @@ def objects_within_range(object_data, time, partial_matching=True, true_for_rang
     index_start = int(search_index) # Find the starting index to define relavent index points on the object list
 
     if ignore_within_saber_distance:
-        distance_from_note_time_in_beats = distance_to_beats(metadata['bpm'], metadata['njs'], saber_hit_distance)  # 0m = hilting, 1m = tipping
-        lower_bound = time - distance_from_note_time_in_beats
+        # TODO update this from a cube to a sphear
+        distance_from_note_time_in_beats = distance_to_beats(metadata['bpm'], metadata['njs'], saber_hit_distance)  # saber_hit_distance: 0m = hilting, 1m = tipping
+        lower_bound = time + distance_from_note_time_in_beats
     else:
-        lower_bound = time - time_range
+        lower_bound = time
 
     if object_data[index_start][key] < time:             # In case the index start point starts behind the time variable, bring it ahead for the next while loop.
         while object_data[index_start][key] < time:
@@ -982,21 +988,71 @@ def objects_within_range(object_data, time, partial_matching=True, true_for_rang
                 index_end -= 1
             else:
                 break
-    while object_data[index_end + 1][key] < time - time_range:     
+    while object_data[index_end + 1][key] < time + time_range:     
         index_end += 1
         if index_end >= object_data_length - 1:
             break
 
     # Verify that all objects are within range (might be commented out later)
     object_return = []
-    for verification in range(index_start-4, index_end + 1+4):
+    for verification in range(index_start, index_end + 1):
         if abs(object_data[verification][key] - time) <= time_range:
             object_return.append(object_data[verification])
         else:
             print(f"Object at index {verification} is out of range")
     
+    if return_indexs:
+        return object_return, [index_start, index_end]
+    else:
+        return object_return
+
+# Returns a list of objects within a specified range at every time index
+# Time_range should be much larger than the time steps.
+def objects_within_range_array(object_data, time_array, partial_matching=True, true_for_range_in_seconds=False, time_range=1, key='beat', ignore_within_saber_distance=False):
+
+    if true_for_range_in_seconds:
+        time_range = time_range * metadata['bpm'] / 60
     
-    return object_return
+    timed_object_array = []
+
+    if ignore_within_saber_distance:
+        # TODO update this from a cube to a sphear
+        distance_from_note_time_in_beats = distance_to_beats(metadata['bpm'], metadata['njs'], saber_hit_distance)  # saber_hit_distance: 0m = hilting, 1m = tipping
+        lower_bound = time + distance_from_note_time_in_beats
+    else:
+        lower_bound = time
+
+    for time_index, time in enumerate(time_array):          # time_index: current index of time_array, time: current beat at time_index in time_array
+        if time_index == 0:
+            objects, returned_indexes = deque(objects_within_range(object_data, time, partial_matching, time_range, key, ignore_within_saber_distance, return_indexs=True))
+            start_index = returned_indexes[0]
+            end_index = returned_indexes[1]
+        else:
+            # Find the new ending index
+            if end_index + 1 <= len(object_data) - 1:    # Check to make sure array access is valid
+                while objects[end_index + 1]['beat'] < time + time_range:
+
+                    
+                    objects.append(object_data[end_index + 1])
+                    end_index += 1
+                    if end_index + 1 <= len(object_data) - 1:
+                        pass
+                    else:
+                        break   # We hit the last object in the list.
+            
+            if start_index <= len(object_data) - 1:    # Check to make sure array access is valid
+                while objects[start_index]['beat'] < lower_bound:
+                    
+                    objects.popleft()
+
+                    if start_index + 1 <= len(object_data) - 1:
+                        start_index += 1
+                    else:
+                        break   # We hit the last object in the list.
+
+        timed_object_array.append(objects)
+
+    return timed_object_array
 
 
 
@@ -1096,16 +1152,10 @@ def swing_path(formatted_map_data, handedness, skill_set):
     else:
         note_data = formatted_map_data['right_note_data']
         other_note_data = formatted_map_data['left_note_data']
-    
     bomb_data = formatted_map_data['bomb_data']
     wall_data = formatted_map_data['wall_data']
     metadata = formatted_map_data['metadata']
-    rotationData = formatted_map_data['rotation_events']
-    
-    
-    
-    
-    
+    lane_rotation_data = formatted_map_data['rotation_events']
     
     accGraph = [[]]
     averageAcc = 0.0    # The acc
@@ -1113,28 +1163,40 @@ def swing_path(formatted_map_data, handedness, skill_set):
     rotation = 0.0      # How much roll+yaw angle
     speed = 0.0         # How much pitch angle
     position = 0.0      # How much position
-    
     noramlity = 0.0     # How common the pattern is
 
     head_path = []
 
-    time_step = 1 / refresh_rate * metadata['bpm'] / 60
+    last_object_time = max(note_data[-1]['beat'], other_note_data[-1]['beat'], bomb_data[-1]['beat'], wall_data[-1]['beat'])
 
-    time_beats = 0
-    last_object = max(note_data[-1]['beat'], other_note_data[-1]['beat'], bomb_data[-1]['beat'], wall_data[-1]['beat'])
+    time_step = 1 / refresh_rate * metadata['bpm'] / 60     # In beats, no need to ever convert to seconds
+    # time_data = range(0, last_object_time, time_step)   #  Build an array of time values to determine frames to use. Range function doesn't work with float values ;-;
+    time_steps = [t * time_step for t in range(0, last_object_time)]
 
-    
-    while time_beats < last_object:
+    # Later, calculate the best time range to reduce vision blocks, or use the reaction time formula, or bake set reaction times for every skill level.
+    other_notes_of_interest_at_time_steps = objects_within_range_array(other_note_data, time_steps, time_range = metadata['jump_distance'], ignore_within_saber_distance=True)
+    bombs_of_interest_at_time_steps = objects_within_range_array(bomb_data, time_steps, time_range = metadata['jump_distance'])
+    walls_of_interest_at_time_steps = objects_within_range_array(wall_data, time_steps, time_range = metadata['jump_distance'])
+
+    index = 0
+    for time_index, time_beats in enumerate(time_steps):
         nearby_objects = []
+        
+        other_notes_of_interest = other_notes_of_interest_at_time_steps[time_index]
+        bombs_of_interest = bombs_of_interest_at_time_steps[time_index]
+        walls_of_interest = walls_of_interest_at_time_steps[time_index]
 
-        notes_of_interest = objects_within_range(note_data, time_beats, true_for_range_in_seconds=True, time_range=1, ignore_within_saber_distance=True)
-        bombs_of_interest = objects_within_range(bomb_data, time_beats, true_for_range_in_seconds=True, time_range=1)
-        walls_of_interest = objects_within_range(wall_data, time_beats, true_for_range_in_seconds=True, time_range=1)
+        objects_to_avoid = other_notes_of_interest + bombs_of_interest + walls_of_interest
+
+        # First calculate head position, then vision blocks
 
 
-        time_beats += time_step
-    
-    
+
+        
+        
+        
+
+
     # note_path = []
     
     # for note_data_index in range(0, len(note_data)):
@@ -1213,15 +1275,15 @@ def techOperations(B_mapData: dict, metadata: dict, isuser=True, verbose=True):
         # print(f"Calculated nerf = {round(low_note_nerf, 2)}")
         # print(f"Calculated balanced tech = {round(balanced_tech, 2)}")
         # print(f"Calculated balanced pass diff = {round(balanced_pass, 2)}")
-        pass
+        
     return 0     # returnDict
 
 
 def mapCalculation(mapData, metadata, isuser=True, verbose=True):
     t0 = time.time()
     newMapData = map_prep(mapData)
-    t1 = time.time()
     data = techOperations(newMapData, metadata, isuser, verbose)
+    t1 = time.time()
     if isuser:
         print(f'Execution Time = {t1 - t0}')
     return data
@@ -1256,7 +1318,10 @@ if __name__ == "__main__":
     
     metadata = {'bpm': infoData['_beatsPerMinute']}
     metadata['njs'] = infoData['_difficultyBeatmapSets'][charIndex]['_difficultyBeatmaps'][diffIndex]['_noteJumpMovementSpeed']
-    metadata['offset'] = infoData['_difficultyBeatmapSets'][charIndex]['_difficultyBeatmaps'][diffIndex]['_noteJumpStartBeatOffset']
+    metadata['start_beat_offset'] = infoData['_difficultyBeatmapSets'][charIndex]['_difficultyBeatmaps'][diffIndex]['_noteJumpStartBeatOffset']
+    
+    metadata['half_jump_duration'] = calculate_half_jump_duration(metadata['njs'], metadata['start_beat_offset'], metadata['bpm'])
+    metadata['jump_distance'] = caculate_jump_distance(metadata['njs'], metadata['start_beat_offset'], metadata['bpm'])
 
     mapCalculation(mapData, metadata, True, True)
     print("Done")
