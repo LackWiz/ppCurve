@@ -22,7 +22,7 @@ y_grid_distance = 0.525   # In meters, averaged 0.55m between bottom and middle 
 # Bombs are roughly equal in size to note badcut hitboxes @ 0.36m
 bomb_offset = [[x_grid_distance / 2 - 0.18, y_grid_distance / 2 - 0.18, 1 - 0.18], [x_grid_distance / 2 + 0.18, y_grid_distance / 2 + 0.18, 1 + 0.18]]     
 saber_hit_distance = 0.5        # The z position where the hitbox will hit the saber. 0 = hilting, 0.5 = mid, 1 = tipping
-refresh_rate = 120              # Simulated refreshrate. Defines the simulation precision
+refresh_rate = 15              # Simulated refreshrate. Defines the simulation precision
 search_frequency = 64
 # ------------------------ Base functions ------------------------
 
@@ -54,6 +54,14 @@ def lerp(p0, p1, t):
     scale = p1 - p0
     offset = p0
     return offset + scale * t
+
+def range_float(start, end, step):
+    accum = start
+    steps = [start]
+    while accum + step <= end:
+        accum += step
+        steps.append(accum)
+    return steps
 
 # Generates an S-curve path between two points in 3D space.
 
@@ -919,7 +927,7 @@ def apply_rotation_data(object_data, rotation_data=[]):
 
 # object_data: accepts the formatted_data format
 # I know partial_matching was supposed to be something, but I can't remember...
-def objects_within_range(object_data, time, partial_matching=True, true_for_range_in_seconds=False, time_range=1, key='beat', ignore_within_saber_distance=False, return_indexs=False):
+def objects_within_range(object_data, time, partial_matching=True, time_range=1, key='beat', true_for_range_in_seconds=False, exclude_within_saber_distance=False, return_indexs=False):
 
     if len(object_data) == 0:
         return []
@@ -939,36 +947,37 @@ def objects_within_range(object_data, time, partial_matching=True, true_for_rang
     object_data_length = len(object_data)       # Setup search parameters
     search_depth = np.round(object_data_length / search_frequency)    # Use a number to ensure square root properties. Maybe switch to a square root method insead of 32
     
+    search_index = int(np.round(object_data_length / 2))                # Good place to start searching
+
     if search_depth >= 1:
         search_count = 0
-        search_index = int(np.round(object_data_length / 2))
         
-    while search_depth > search_count:      # Use division to quickly but roughly locate the correct index
+        while search_depth > search_count:      # Use division to quickly but roughly locate the correct index
 
-        if object_data[search_index][key] < time:
-            new_search_index = int(np.round(search_index + search_index / 2))
+            if object_data[search_index][key] < time:
+                new_search_index = int(np.round(search_index + search_index / 2))
 
-        if object_data[search_index][key] > time:
-            new_search_index = int(np.round(search_index - search_index / 2))
+            if object_data[search_index][key] > time:
+                new_search_index = int(np.round(search_index - search_index / 2))
 
-        search_index = new_search_index
+            search_index = new_search_index
 
-        min(search_index, object_data_length - 1)   # Clamp the search index to within accessable memory
-        max(search_index, 0)
+            search_index = min(search_index, object_data_length - 1)   # Clamp the search index to within accessable memory
+            search_index = max(search_index, 0)
 
-        if abs(object_data[search_index][key] - time) <= time_range:     # Lucky, we're within range, good enough to break out of this loop early
-            break
+            if abs(object_data[search_index][key] - time) <= time_range:     # Lucky, we're within range, good enough to break out of this loop early
+                break
 
-        search_count += 1
+            search_count += 1
 
     index_start = int(search_index) # Find the starting index to define relavent index points on the object list
 
-    if ignore_within_saber_distance:
+    if exclude_within_saber_distance:
         # TODO update this from a cube to a sphear
         distance_from_note_time_in_beats = distance_to_beats(metadata['bpm'], metadata['njs'], saber_hit_distance)  # saber_hit_distance: 0m = hilting, 1m = tipping
         lower_bound = time + distance_from_note_time_in_beats
     else:
-        lower_bound = time
+        lower_bound = time - time_range
 
     if object_data[index_start][key] < time:             # In case the index start point starts behind the time variable, bring it ahead for the next while loop.
         while object_data[index_start][key] < time:
@@ -1008,31 +1017,42 @@ def objects_within_range(object_data, time, partial_matching=True, true_for_rang
 
 # Returns a list of objects within a specified range at every time index
 # Time_range should be much larger than the time steps.
-def objects_within_range_array(object_data, time_array, partial_matching=True, true_for_range_in_seconds=False, time_range=1, key='beat', ignore_within_saber_distance=False):
+def objects_within_range_array(object_data, time_array, partial_matching=True, true_for_range_in_seconds=False, time_range=1, key='beat', exclude_within_saber_distance2=False):
 
     if true_for_range_in_seconds:
         time_range = time_range * metadata['bpm'] / 60
     
     timed_object_array = []
 
-    if ignore_within_saber_distance:
-        # TODO update this from a cube to a sphear
-        distance_from_note_time_in_beats = distance_to_beats(metadata['bpm'], metadata['njs'], saber_hit_distance)  # saber_hit_distance: 0m = hilting, 1m = tipping
-        lower_bound = time + distance_from_note_time_in_beats
-    else:
-        lower_bound = time
+    if exclude_within_saber_distance2:
+        saber_distance_from_note_time_in_beats = distance_to_beats(metadata['bpm'], metadata['njs'], saber_hit_distance)  # saber_hit_distance: 0m = hilting, 1m = tipping
 
+    first_object_time = object_data[0][key]
+    last_object_time = object_data[-1][key]
+    
+    in_range = False
+    find_first_objects = False
+    
     for time_index, time in enumerate(time_array):          # time_index: current index of time_array, time: current beat at time_index in time_array
-        if time_index == 0:
-            objects, returned_indexes = deque(objects_within_range(object_data, time, partial_matching, time_range, key, ignore_within_saber_distance, return_indexs=True))
-            start_index = returned_indexes[0]
-            end_index = returned_indexes[1]
+        if time + time_range < first_object_time:    # Quickly iterate through beginning time indexes with out of range objects
+            objects = []
         else:
+            if not in_range:    # This will activate only once per function call
+                first_time_index = time_index
+                in_range = True
+                find_first_objects = True
+        
+        if in_range:
+            if find_first_objects:
+                objects, returned_indexes = objects_within_range(object_data=object_data, time=time, partial_matching=partial_matching, true_for_range_in_seconds=true_for_range_in_seconds, time_range=time_range, key=key, exclude_within_saber_distance=exclude_within_saber_distance2, return_indexs=True)
+                objects = deque(objects)    # Convert from list into queue
+                start_index = returned_indexes[0]
+                end_index = returned_indexes[1]
+                find_first_objects = False
+
             # Find the new ending index
             if end_index + 1 <= len(object_data) - 1:    # Check to make sure array access is valid
-                while objects[end_index + 1]['beat'] < time + time_range:
-
-                    
+                while object_data[end_index + 1]['beat'] < time + time_range:
                     objects.append(object_data[end_index + 1])
                     end_index += 1
                     if end_index + 1 <= len(object_data) - 1:
@@ -1040,17 +1060,24 @@ def objects_within_range_array(object_data, time_array, partial_matching=True, t
                     else:
                         break   # We hit the last object in the list.
             
+            if exclude_within_saber_distance2:
+                # TODO update this from a cube to a sphear
+                lower_bound = time + saber_distance_from_note_time_in_beats
+            else:
+                lower_bound = time - time_range
+
             if start_index <= len(object_data) - 1:    # Check to make sure array access is valid
-                while objects[start_index]['beat'] < lower_bound:
+                while object_data[start_index]['beat'] < lower_bound:
                     
-                    objects.popleft()
+                    if len(objects) > 0:
+                        objects.popleft()
 
                     if start_index + 1 <= len(object_data) - 1:
                         start_index += 1
                     else:
                         break   # We hit the last object in the list.
 
-        timed_object_array.append(objects)
+        timed_object_array.append(list(objects))
 
     return timed_object_array
 
@@ -1169,12 +1196,15 @@ def swing_path(formatted_map_data, handedness, skill_set):
 
     last_object_time = max(note_data[-1]['beat'], other_note_data[-1]['beat'], bomb_data[-1]['beat'], wall_data[-1]['beat'])
 
-    time_step = 1 / refresh_rate * metadata['bpm'] / 60     # In beats, no need to ever convert to seconds
+    time_step = (1 / refresh_rate) * metadata['bpm'] / 60     # In beats, no need to ever convert to seconds
     # time_data = range(0, last_object_time, time_step)   #  Build an array of time values to determine frames to use. Range function doesn't work with float values ;-;
-    time_steps = [t * time_step for t in range(0, last_object_time)]
+    # time_steps = [t * time_step for t in range(0, last_object_time)]
+
+    time_steps = range_float(0, last_object_time, time_step)
 
     # Later, calculate the best time range to reduce vision blocks, or use the reaction time formula, or bake set reaction times for every skill level.
-    other_notes_of_interest_at_time_steps = objects_within_range_array(other_note_data, time_steps, time_range = metadata['jump_distance'], ignore_within_saber_distance=True)
+    notes_of_interest_at_time_steps = objects_within_range_array(note_data, time_steps, time_range = metadata['jump_distance'], exclude_within_saber_distance2=True)
+    other_notes_of_interest_at_time_steps = objects_within_range_array(other_note_data, time_steps, time_range = metadata['jump_distance'], exclude_within_saber_distance2=True)
     bombs_of_interest_at_time_steps = objects_within_range_array(bomb_data, time_steps, time_range = metadata['jump_distance'])
     walls_of_interest_at_time_steps = objects_within_range_array(wall_data, time_steps, time_range = metadata['jump_distance'])
 
@@ -1183,10 +1213,11 @@ def swing_path(formatted_map_data, handedness, skill_set):
         nearby_objects = []
         
         other_notes_of_interest = other_notes_of_interest_at_time_steps[time_index]
+        
         bombs_of_interest = bombs_of_interest_at_time_steps[time_index]
         walls_of_interest = walls_of_interest_at_time_steps[time_index]
 
-        objects_to_avoid = other_notes_of_interest + bombs_of_interest + walls_of_interest
+        objects_to_avoid = bombs_of_interest + walls_of_interest
 
         # First calculate head position, then vision blocks
 
