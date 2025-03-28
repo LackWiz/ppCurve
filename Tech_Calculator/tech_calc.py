@@ -777,33 +777,40 @@ def create_note_list(object_data: dict):
                     note_angles.append(mod(cut_direction_index[grouped_notes[forloop_index]['d']] + grouped_notes[forloop_index]['a'], 360))       # Get block angle, including precision angle
 
         else:       # Multiple notes at the same time can alter note angles
-            note_angles = note_angle_snapping(grouped_notes)
+            note_angles = note_angle_snapping(grouped_notes)    # If there's 2 notes on the same beat, use another function to determine if and how much snapping.
         
+        note_data.append({})
+        note_data[-1]['beat'] = grouped_notes[0]['b']                          #Float
+        note_data[-1]['objects'] = []
+
         for grouped_note_index in range(0, len(grouped_notes)):
 
             current_note = grouped_notes[grouped_note_index]
 
             hitbox_pos_data, visbox_pos_data = calc_note_hitbox([current_note['x'], current_note['y']], note_angles[grouped_note_index])     
-
-            time_start = current_note['b']
             
             if current_note['has_chain']:
                 link_num, link_pos, link_angle, link_beat = chain_curve(current_note['chain_data'])
                 
 
 
-            note_data.append({})
+            
+            note_data[-1]['objects'].append({})
+
             # swingData[-1]['LRhand'] = handedness                            #Bool
-            note_data[-1]['is_dot'] = is_dot                                  #Bool
-            note_data[-1]['beat'] = time_start                          #Float
-            note_data[-1]['hitbox'] = hitbox_pos_data                         #Array of Vector3
-            note_data[-1]['visbox'] = visbox_pos_data
-            note_data[-1]['note_angle'] = note_angles[grouped_note_index]                         #Vector3
-            note_data[-1]['pre_angle_disabled'] = current_note['pre_arc']             #Bool
-            note_data[-1]['post_angle_disabled'] = current_note['post_arc']           #Bool
-            note_data[-1]['has_chain'] = current_note['has_chain']                   #Bool
+            note_data[-1]['objects'][-1]['is_dot'] = is_dot                                  #Bool
+            note_data[-1]['objects'][-1]['hitbox'] = hitbox_pos_data                         #Array of Vector3
+            note_data[-1]['objects'][-1]['visbox'] = visbox_pos_data
+            note_data[-1]['objects'][-1]['note_angle'] = note_angles[grouped_note_index]                         #Vector3
+            note_data[-1]['objects'][-1]['pre_angle_disabled'] = current_note['pre_arc']             #Bool
+            note_data[-1]['objects'][-1]['post_angle_disabled'] = current_note['post_arc']           #Bool
+            note_data[-1]['objects'][-1]['has_chain'] = current_note['has_chain']                   #Bool
             if current_note['has_chain']:
-                note_data[-1]['chain_data'] = {'link_num': link_num, 'link_pos': link_pos, 'link_angle': link_angle, 'link_beat': link_beat}
+                note_data[-1]['objects'][-1]['chain_data'] = {}
+                note_data[-1]['objects'][-1]['chain_data']['link_num'] = link_num
+                note_data[-1]['objects'][-1]['chain_data']['link_pos'] = link_pos
+                note_data[-1]['objects'][-1]['chain_data']['link_angle'] = link_angle
+                note_data[-1]['objects'][-1]['chain_data']['link_beat'] = link_beat
 
         note_index += 1
 
@@ -826,14 +833,14 @@ def create_bomb_list(bombs: list):
 
         bomb_data.append({})
         bomb_data[-1]['beat'] = same_time[0]['b']
+        bomb_data[-1]['objects'] = []
 
-        bomb_data[-1]['hitbox'] = {'pos_data': []}
-        bomb_data[-1]['visbox'] = {'pos_data': []}
         for j in range(0, len(same_time)):
             bomb_pos = [same_time[j]['x'], same_time[j]['y']]
             pos_data, vis_data = calculate_bomb_hitbox(bomb_pos)
-            bomb_data[-1]['hitbox']['pos_data'].append(pos_data)     # We will approximate bombs to be cubes.
-            bomb_data[-1]['visbox']['pos_data'].append(vis_data)
+            bomb_data[-1]['objects'].append({'hitbox': {'pos_data': {}}, 'visbox': {'pos_data': {}}})
+            bomb_data[-1]['objects'][-1]['hitbox']['pos_data'] = pos_data     # We will approximate bombs to be cubes.
+            bomb_data[-1]['objects'][-1]['visbox']['pos_data'] = vis_data
 
         bomb_index += 1
     
@@ -850,20 +857,28 @@ def create_wall_list(walls: list):
         # Consolidate walls on the same beat.
         if wall_index + 1 < len(walls) - 1:          # Check if array access is valid
             while (walls[wall_index]['b'] == walls[wall_index + 1]['b']) and (wall_index + 2 < len(walls)):
-                same_time.append(walls[wall_index])
-                wall_index += 1
+                if walls[wall_index]['d'] > 0:                  # Exclude fakewalls (negative duration)
+                    same_time.append(walls[wall_index])
+                    wall_index += 1
         
         wall_data.append({})     # Initialize new entry
         wall_data[-1]['beat'] = same_time[0]['b']
-        wall_data[-1]['hitbox'] = {}      # We will approximate bombs to be cubes instead of sphears for speed.
-        wall_data[-1]['visbox'] = {}
+        group_beat_f = same_time[0]['b']
+        wall_data[-1]['objects'] = []
         
         for j in range(0, len(same_time)):
             hitbox_data, visbox_data = calculate_wall_hitbox(same_time[j]['x'], same_time[j]['y'], same_time[j]['w'], same_time[j]['d'], same_time[j]['h'])
-            wall_data[-1]['hitbox']['pos_data'] = hitbox_data
-            wall_data[-1]['hitbox']['pos_data']['length_seconds'] = beats_to_seconds(same_time[j]['d'], metadata['bpm'])
-            wall_data[-1]['hitbox']['pos_data']['angle'] = np.array([0, 0, 0])
-            wall_data[-1]['visbox']['pos_data'] = visbox_data
+            wall_data[-1]['objects'].append({'hitbox': {'pos_data': {}}, 'visbox': {'pos_data': {}}})
+            wall_data[-1]['objects'][-1]['beat_f'] = same_time[j]['b'] + same_time[j]['d']
+            wall_data[-1]['objects'][-1]['hitbox']['pos_data'] = hitbox_data
+            wall_data[-1]['objects'][-1]['length_seconds'] = beats_to_seconds(same_time[j]['d'], metadata['bpm'])
+            wall_data[-1]['objects'][-1]['hitbox']['pos_data']['angle'] = np.array([0, 0, 0])
+            wall_data[-1]['objects'][-1]['visbox']['pos_data'] = visbox_data
+            
+            if wall_data[-1]['objects'][-1]['beat_f'] > group_beat_f:
+                group_beat_f = wall_data[-1]['objects'][-1]['beat_f']
+
+        wall_data[-1]['beat_f'] = group_beat_f
 
         wall_index += 1
     
@@ -877,51 +892,40 @@ def apply_rotation_data(object_data, rotation_data=[]):
     rotation_index = 0   # Index of future incoming rotation event
     inclusive_flag = not rotation_data[rotation_index]['e']
     # test_rotation_changelog = []
-    if isinstance(object_data[0]['hitbox']['pos_data'], list):
-        position_data_is_list = True
-    else:
-        position_data_is_list = False
+    # if isinstance(object_data[0]['hitbox']['pos_data'], list):
+    #     position_data_is_list = True
+    # else:
+    #     position_data_is_list = False
 
-    for i in range(0, len(object_data)):
-        if rotation_index < len(rotation_data):
-            
-            if inclusive_flag:
-                while object_data[i]['beat'] >= rotation_data[rotation_index]['b']:    # While loop to handle cases where there are multiple rotation events between objects
-                    rotation += rotation_data[rotation_index]['r']
-                    # test_rotation_changelog.append({'rotation': rotation, 'beat': rotationData[rotationIndex]['b']})
-                    if rotation_index + 1 < len(rotation_data):
-                        rotation_index += 1
-                        inclusive_flag = not rotation_data[rotation_index]['e']
-                    else:
-                        break
-            else:
-                while object_data[i]['beat'] > rotation_data[rotation_index]['b']:     # While loop to handle cases where there are multiple rotation events between objects
-                    rotation += rotation_data[rotation_index]['r']
-                    # test_rotation_changelog.append({'rotation': rotation, 'beat': rotationData[rotationIndex]['b']})
-                    if rotation_index + 1 < len(rotation_data):
-                        rotation_index += 1
-                        inclusive_flag = not rotation_data[rotation_index]['e']
-                    else:
-                        break
+    for object_index in range(0, len(object_data)):     # Gasp, the double for looop
+        for group_index in range(0, len(object_data[object_index]['objects'])):    # Thankfully the len of objectdata at objectindex is nearly always 1, and has a max reasonable size of 12. Either way, it scales with O(n) placed objects
+            if rotation_index < len(rotation_data):
+                
+                if inclusive_flag:
+                    while object_data[object_index]['beat'] >= rotation_data[rotation_index]['b']:    # While loop to handle cases where there are multiple rotation events between objects
+                        rotation += rotation_data[rotation_index]['r']
+                        # test_rotation_changelog.append({'rotation': rotation, 'beat': rotationData[rotationIndex]['b']})
+                        if rotation_index + 1 < len(rotation_data):
+                            rotation_index += 1
+                            inclusive_flag = not rotation_data[rotation_index]['e']
+                        else:
+                            break
+                else:
+                    while object_data[object_index]['beat'] > rotation_data[rotation_index]['b']:     # While loop to handle cases where there are multiple rotation events between objects
+                        rotation += rotation_data[rotation_index]['r']
+                        # test_rotation_changelog.append({'rotation': rotation, 'beat': rotationData[rotationIndex]['b']})
+                        if rotation_index + 1 < len(rotation_data):
+                            rotation_index += 1
+                            inclusive_flag = not rotation_data[rotation_index]['e']
+                        else:
+                            break
 
-        # p0 = np.array([objectData[i]['hitbox']['p0']['x'],objectData[i]['hitbox']['p0']['y'],objectData[i]['hitbox']['p0']['z']])
-        # p1 = np.array([objectData[i]['hitbox']['p1']['x'],objectData[i]['hitbox']['p1']['y'],objectData[i]['hitbox']['p1']['z']])
-        if position_data_is_list:
-            for pos_index in range(0, len(object_data[i]['hitbox']['pos_data'])):
-                p0 = object_data[i]['hitbox']['pos_data'][pos_index]['p0']
-                p1 = object_data[i]['hitbox']['pos_data'][pos_index]['p1']
-                center = np.array([x_grid_distance * 2, 0, 0])
-                # Rotation must be inverted to convert between mathimatical and beatsaber rotation orientation
-                object_data[i]['hitbox']['pos_data'][pos_index]['p0'] = rotate_point(p0, center, 0, -rotation, 0)
-                object_data[i]['hitbox']['pos_data'][pos_index]['p1'] = rotate_point(p1, center, 0, -rotation, 0)
-                object_data[i]['lane_rotation'] = mod(-rotation, 360)
-        else:
-            p0 = object_data[i]['hitbox']['pos_data']['p0']
-            p1 = object_data[i]['hitbox']['pos_data']['p1']
-            center = np.array([0,0,0])
-            object_data[i]['hitbox']['pos_data']['p0'] = rotate_point(p0, center, 0, -rotation, 0)
-            object_data[i]['hitbox']['pos_data']['p1'] = rotate_point(p1, center, 0, -rotation, 0)
-            object_data[i]['lane_rotation'] = mod(-rotation, 360)
+                p0 = object_data[object_index]['objects'][group_index]['hitbox']['pos_data']['p0']
+                p1 = object_data[object_index]['objects'][group_index]['hitbox']['pos_data']['p1']
+                center = np.array([0,0,0])
+                object_data[object_index]['objects'][group_index]['hitbox']['pos_data']['p0'] = rotate_point(p0, center, 0, -rotation, 0)
+                object_data[object_index]['objects'][group_index]['hitbox']['pos_data']['p1'] = rotate_point(p1, center, 0, -rotation, 0)
+                object_data[object_index]['objects'][group_index]['lane_rotation'] = mod(-rotation, 360)
     
     return object_data
 
@@ -979,11 +983,11 @@ def objects_within_range(object_data, time, partial_matching=True, time_range=1,
     else:
         lower_bound = time - time_range
 
-    if object_data[index_start][key] < time:             # In case the index start point starts behind the time variable, bring it ahead for the next while loop.
-        while object_data[index_start][key] < time:
-            index_start += 1
-            if index_start >= object_data_length - 1:
-                break
+           
+    while object_data[index_start][key] < lower_bound:      # In case the index start-point starts behind the time variable, bring it ahead for the next while loop.
+        index_start += 1
+        if index_start >= object_data_length - 1:
+            break
     while object_data[index_start - 1][key] > lower_bound:     # While the index time is greater than the lower bound
         index_start -= 1
         if index_start == 0:
@@ -991,12 +995,11 @@ def objects_within_range(object_data, time, partial_matching=True, time_range=1,
 
     index_end = int(search_index)
     
-    if object_data[index_end][key] > time:             # In case the index end point starts ahead the time variable, bring it back for the next while loop.
-        while object_data[index_end][key] > time:
-            if index_end > 0:
-                index_end -= 1
-            else:
-                break
+    while object_data[index_end][key] > time + time_range:      # In case the index end point starts ahead the time variable, bring it back for the next while loop.
+        if index_end > 0:
+            index_end -= 1
+        else:
+            break
     while object_data[index_end + 1][key] < time + time_range:     
         index_end += 1
         if index_end >= object_data_length - 1:
@@ -1081,7 +1084,59 @@ def objects_within_range_array(object_data, time_array, partial_matching=True, t
 
     return timed_object_array
 
+def walls_within_range(wall_data, time, time_range, true_for_range_in_seconds=False):
+    if len(wall_data) == 0:
+        return -1
+    
+    key = 'beat'
+    key_f = 'beat_f'
 
+    first_object_time = wall_data[0][key]
+
+    last_object_time = 0        # Init
+    wall_data_len = 0           # Init
+    for grouped_walls in wall_data:
+        for wall in grouped_walls['objects']:
+            if wall[key_f] > last_object_time:
+                last_object_time = wall[key_f]
+        wall_data_len += 1              # Good chance to get the true number of walls, not sure if it'll be used.
+
+    
+    if true_for_range_in_seconds:
+        time_range = time_range * metadata['bpm'] / 60
+    
+    if time - time_range > last_object_time:    # If there's no objects around the requested time within range, then there's no data of interest.
+        return []
+    if time + time_range < first_object_time:
+        return []
+    
+    object_data_length = len(wall_data)       # Setup search parameters
+    
+    # Find the starting index to define relavent index points on the object list
+    lower_bound = time - time_range
+    upper_bound = time + time_range
+    object_return = []
+
+    # 6 cases for wall matching
+    # if beat < lower and beat_f < lower                                            0
+    # if beat > lower and beat_f > lower                                            0
+    # if beat < lower and beat < upper and beat_f > lower and beat_f < upper        1
+    # if beat < lower and beat < upper and beat_f > lower and beat_f > upper        1
+    # if beat > lower and beat < upper and beat_f > lower and beat_f < upper        1
+    # if beat > lower and beat < upper and beat_f > lower and beat_f > upper        1
+        
+    for wall_data_index in range(0, len(wall_data)):
+        if wall_data[wall_data_index][key] <= upper_bound and wall_data[wall_data_index][key_f] >= lower_bound:
+            for grouped_wall_index in range(0, len(wall_data[wall_data_index]['objects'])):
+                if wall_data[wall_data_index][key] <= upper_bound and wall_data[wall_data_index]['objects'][grouped_wall_index][key_f] >= lower_bound:       # Starting beat inside wall_data[wall_data_index]['objects'][grouped_wall_index] all share the same starting beat, so we don't need to check it again.
+                    object_return.append({})
+                    object_return[-1]['beat'] = wall_data[wall_data_index][key]
+                    object_return[-1]['objects'] = wall_data[wall_data_index]['objects'][grouped_wall_index]
+        
+        elif wall_data[wall_data_index][key] > upper_bound:
+            break   # No walls start forwards, then backwards, so we can break the loop early.
+
+    return object_return
 
 
 
@@ -1173,6 +1228,8 @@ def path_analysis(path):
     pass
 
 def swing_path(formatted_map_data, handedness, skill_set):
+    t0 = time.time()
+    
     if handedness:
         note_data = formatted_map_data['left_note_data']
         other_note_data = formatted_map_data['right_note_data']
@@ -1202,24 +1259,41 @@ def swing_path(formatted_map_data, handedness, skill_set):
 
     time_steps = range_float(0, last_object_time, time_step)
 
-    # Later, calculate the best time range to reduce vision blocks, or use the reaction time formula, or bake set reaction times for every skill level.
-    notes_of_interest_at_time_steps = objects_within_range_array(note_data, time_steps, time_range = metadata['jump_distance'], exclude_within_saber_distance2=True)
-    other_notes_of_interest_at_time_steps = objects_within_range_array(other_note_data, time_steps, time_range = metadata['jump_distance'], exclude_within_saber_distance2=True)
-    bombs_of_interest_at_time_steps = objects_within_range_array(bomb_data, time_steps, time_range = metadata['jump_distance'])
-    walls_of_interest_at_time_steps = objects_within_range_array(wall_data, time_steps, time_range = metadata['jump_distance'])
+    # TODO, calculate the best time range to reduce vision blocks, or use the reaction time formula, or bake set reaction times for every skill level.
+    notes_of_interest_at_time_steps = objects_within_range_array(note_data, time_steps, time_range=metadata['jump_distance'], exclude_within_saber_distance2=True)
+    other_notes_of_interest_at_time_steps = objects_within_range_array(other_note_data, time_steps, time_range=metadata['jump_distance'], exclude_within_saber_distance2=True)
+    bombs_of_interest_at_time_steps = objects_within_range_array(bomb_data, time_steps, time_range=metadata['jump_distance'])
+    walls_of_interest_at_time_steps = walls_within_range(wall_data, 5, time_range=metadata['jump_distance'])
+    t1 = time.time()
+
+    
 
     index = 0
+    head_data_at_time_steps = []
     for time_index, time_beats in enumerate(time_steps):
-        nearby_objects = []
-        
+
+        notes_of_interest = notes_of_interest_at_time_steps[time_index]
         other_notes_of_interest = other_notes_of_interest_at_time_steps[time_index]
-        
         bombs_of_interest = bombs_of_interest_at_time_steps[time_index]
         walls_of_interest = walls_of_interest_at_time_steps[time_index]
 
-        objects_to_avoid = bombs_of_interest + walls_of_interest
+        objects_to_miss = walls_of_interest
+        objects_to_avoid = bombs_of_interest
 
         # First calculate head position, then vision blocks
+        for wall_of_int in walls_of_interest:
+            for wall in wall_of_int['objects']:
+                if time_beats > wall_of_int['beat'] and time_beats < wall['beat_f']:
+                    
+                    
+                    pass
+                distance = abs(time_beats - wall_of_int['beat'])
+                time_weight = 0.9 ** distance
+
+        head_pos = 1
+
+
+        head_data_at_time_steps.append({})
 
 
 
