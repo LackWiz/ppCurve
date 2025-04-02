@@ -55,12 +55,21 @@ def lerp(p0, p1, t):
     offset = p0
     return offset + scale * t
 
-def range_float(start, end, step):
+def range_float(start, end, step, accurate_steps=False):
     accum = start
     steps = [start]
-    while accum + step <= end:
-        accum += step
-        steps.append(accum)
+    
+    if accurate_steps:
+        step_count = 1
+        while step_count * step <= end:
+            steps.append(step_count * step)
+            step_count += 1
+    
+    else:
+        while accum + step <= end:
+            accum += step
+            steps.append(accum)
+    
     return steps
 
 # Generates an S-curve path between two points in 3D space.
@@ -1084,7 +1093,7 @@ def objects_within_range_array(object_data, time_array, partial_matching=True, t
 
     return timed_object_array
 
-def walls_within_range(wall_data, time, time_range, true_for_range_in_seconds=False):
+def walls_within_range(wall_data, time, time_range=1, true_for_range_in_seconds=False, return_indexs=False):
     if len(wall_data) == 0:
         return -1
     
@@ -1116,6 +1125,8 @@ def walls_within_range(wall_data, time, time_range, true_for_range_in_seconds=Fa
     lower_bound = time - time_range
     upper_bound = time + time_range
     object_return = []
+    first_wall = False
+    wall_indexes = []
 
     # 6 cases for wall matching
     # if beat < lower and beat_f < lower                                            0
@@ -1124,21 +1135,122 @@ def walls_within_range(wall_data, time, time_range, true_for_range_in_seconds=Fa
     # if beat < lower and beat < upper and beat_f > lower and beat_f > upper        1
     # if beat > lower and beat < upper and beat_f > lower and beat_f < upper        1
     # if beat > lower and beat < upper and beat_f > lower and beat_f > upper        1
+    # beat < upper and beat_f > lower is true whenever the wall is within range
+    # Since there's no need to differentiate between the types of wall vs range overlap, we can simplify to "beat < upper and beat_f > lower"
         
     for wall_data_index in range(0, len(wall_data)):
-        if wall_data[wall_data_index][key] <= upper_bound and wall_data[wall_data_index][key_f] >= lower_bound:
+        if wall_data[wall_data_index][key] <= upper_bound and wall_data[wall_data_index][key_f] >= lower_bound:         # Check the grouped wall statistics to see if there's any walls of interest.
+            object_return.append({'objects': []})       # Initialize the 'object' key as list
+            object_return[-1]['beat'] = wall_data[wall_data_index][key]
+            object_return[-1]['beat_f'] = wall_data[wall_data_index][key_f]
+            
             for grouped_wall_index in range(0, len(wall_data[wall_data_index]['objects'])):
                 if wall_data[wall_data_index][key] <= upper_bound and wall_data[wall_data_index]['objects'][grouped_wall_index][key_f] >= lower_bound:       # Starting beat inside wall_data[wall_data_index]['objects'][grouped_wall_index] all share the same starting beat, so we don't need to check it again.
-                    object_return.append({})
-                    object_return[-1]['beat'] = wall_data[wall_data_index][key]
-                    object_return[-1]['objects'] = wall_data[wall_data_index]['objects'][grouped_wall_index]
+                    object_return[-1]['objects'].append(wall_data[wall_data_index]['objects'][grouped_wall_index])
+            
+            # if not first_wall:      # Capture the first valid wall index.
+            #     wall_start_index = wall_data_index
+            #     first_wall = True
+            
+            wall_indexes.append(wall_data_index)            # Create a list of indexs to reference.
         
         elif wall_data[wall_data_index][key] > upper_bound:
+            wall_end_index = wall_data_index - 1
             break   # No walls start forwards, then backwards, so we can break the loop early.
+    
+    if return_indexs:
+        # return object_return, [wall_start_index, wall_end_index]
+        return object_return, wall_indexes
+    else:
+        return object_return
 
-    return object_return
+def walls_within_range_array(wall_data, time_array, true_for_range_in_seconds=False, time_range=1):
 
+    if len(wall_data) == 0:
+        return -1
+    
+    key = 'beat'
+    key_f = 'beat_f'
 
+    first_object_time = wall_data[0][key]
+
+    last_object_time = 0        # Init
+    total_num_walls = 0           # Init
+    for grouped_walls in wall_data:
+        for wall in grouped_walls['objects']:
+            if wall[key_f] > last_object_time:
+                last_object_time = wall[key_f]
+            total_num_walls += 1              # Good chance to get the true number of walls, not sure if it'll be used.
+    
+    in_range = False
+    find_first_objects = False
+    timed_object_array = []
+    wall_data_index = 0
+    
+    for time_index, time in enumerate(time_array):          # time_index: current index of time_array, time: current beat at time_index in time_array
+        lower_bound = time - time_range
+        upper_bound = time + time_range
+        
+        
+        if upper_bound < first_object_time:    # Quickly iterate through beginning time indexes with out of range objects
+            objects = []
+        else:
+            if not in_range:    # This will activate only once per function call
+                first_time_index = time_index
+                in_range = True
+                find_first_objects = True
+        
+        if in_range:
+            if find_first_objects:
+                objects, wall_indexes = walls_within_range(wall_data, time, true_for_range_in_seconds=true_for_range_in_seconds, time_range=time_range, return_indexs=True)
+                objects = deque(objects)    # Convert from list into queue
+                wall_indexes = deque(wall_indexes)
+                # wall_index_of_first_object = wall_indexes[0]        # Load the starting index
+                # wall_index_of_last_object = wall_indexes[1]         # Load the ending index  
+                find_first_objects = False
+                wall_data_index = wall_indexes[-1]                      # Grab the last 
+
+            else:
+                fl_wall_index = 0
+                
+                for fl_1 in range(0, len(objects) - 1):   # Remove walls that are no longer in view (range)
+                    fl_group_index = 0
+                    
+                    for fl2 in range(0, len(objects[fl_wall_index]['objects'])):
+                        if objects[fl_wall_index]['objects'][fl_group_index][key_f] < lower_bound:
+                            del objects[fl_wall_index]['objects'][fl_group_index]
+                            fl_group_index -= 1
+                        fl_group_index += 1
+                    
+                        if len(objects[fl_wall_index]['objects']) == 0:
+                            del objects[fl_wall_index]
+                            del wall_indexes[fl_wall_index]
+                            fl_wall_index -= 1
+
+                    fl_wall_index += 1
+
+                # Walls are sorted by time and grouped if they start on the same beat, therefore we only need to check a set of walls once
+                
+                if wall_data_index + 1 <= len(wall_data) - 1:    # Check if there's more walls of interest
+                    if wall_data[wall_data_index + 1][key] <= upper_bound:
+                        
+                        objects.append({'objects': []})
+                        objects[-1]['beat'] = wall_data[wall_data_index + 1][key]
+                        objects[-1]['beat_f'] = wall_data[wall_data_index + 1][key_f]
+
+                        for grouped_wall_index in range(0, len(wall_data[wall_data_index + 1]['objects'])):
+                            objects[-1]['objects'].append(wall_data[wall_data_index + 1]['objects'][grouped_wall_index])
+                        wall_indexes.append(wall_data_index + 1)
+
+                        if wall_data_index - 1 < len(wall_data) - 1:
+                            wall_data_index += 1
+                        else:
+                            # break
+                            pass  
+
+        timed_object_array.append(list(objects))
+
+    return timed_object_array
 
 # ------------------------ Algo specific functions ------------------------
 # TODO: Finish
@@ -1240,6 +1352,10 @@ def swing_path(formatted_map_data, handedness, skill_set):
     wall_data = formatted_map_data['wall_data']
     metadata = formatted_map_data['metadata']
     lane_rotation_data = formatted_map_data['rotation_events']
+
+    # jump_distance = skill_set['jump_distance']
+    jump_distance = metadata['jump_distance']
+
     
     accGraph = [[]]
     averageAcc = 0.0    # The acc
@@ -1251,19 +1367,19 @@ def swing_path(formatted_map_data, handedness, skill_set):
 
     head_path = []
 
-    last_object_time = max(note_data[-1]['beat'], other_note_data[-1]['beat'], bomb_data[-1]['beat'], wall_data[-1]['beat'])
+    last_object_time = max(note_data[-1]['beat'], other_note_data[-1]['beat'], bomb_data[-1]['beat'], wall_data[-1]['beat_f'])
 
     time_step = (1 / refresh_rate) * metadata['bpm'] / 60     # In beats, no need to ever convert to seconds
     # time_data = range(0, last_object_time, time_step)   #  Build an array of time values to determine frames to use. Range function doesn't work with float values ;-;
     # time_steps = [t * time_step for t in range(0, last_object_time)]
 
-    time_steps = range_float(0, last_object_time, time_step)
+    time_steps = range_float(0, last_object_time, time_step, accurate_steps=True)
 
     # TODO, calculate the best time range to reduce vision blocks, or use the reaction time formula, or bake set reaction times for every skill level.
-    notes_of_interest_at_time_steps = objects_within_range_array(note_data, time_steps, time_range=metadata['jump_distance'], exclude_within_saber_distance2=True)
-    other_notes_of_interest_at_time_steps = objects_within_range_array(other_note_data, time_steps, time_range=metadata['jump_distance'], exclude_within_saber_distance2=True)
-    bombs_of_interest_at_time_steps = objects_within_range_array(bomb_data, time_steps, time_range=metadata['jump_distance'])
-    walls_of_interest_at_time_steps = walls_within_range(wall_data, 5, time_range=metadata['jump_distance'])
+    notes_of_interest_at_time_steps = objects_within_range_array(note_data, time_steps, time_range=jump_distance, exclude_within_saber_distance2=True)
+    other_notes_of_interest_at_time_steps = objects_within_range_array(other_note_data, time_steps, time_range=jump_distance, exclude_within_saber_distance2=True)
+    bombs_of_interest_at_time_steps = objects_within_range_array(bomb_data, time_steps, time_range=jump_distance)
+    walls_of_interest_at_time_steps = walls_within_range_array(wall_data, time_steps, time_range=jump_distance)
     t1 = time.time()
 
     
@@ -1420,7 +1536,8 @@ if __name__ == "__main__":
         if d.get('_difficultyRank') == diffNum:
             diffIndex = i
             break
-    
+
+    # Besides start_beat_offset, the other variables could change while playing, so these values may be bound to objects, or tracked globally.
     metadata = {'bpm': infoData['_beatsPerMinute']}
     metadata['njs'] = infoData['_difficultyBeatmapSets'][charIndex]['_difficultyBeatmaps'][diffIndex]['_noteJumpMovementSpeed']
     metadata['start_beat_offset'] = infoData['_difficultyBeatmapSets'][charIndex]['_difficultyBeatmaps'][diffIndex]['_noteJumpStartBeatOffset']
