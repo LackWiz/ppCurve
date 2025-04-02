@@ -10,6 +10,8 @@ from scipy.special import comb
 import time
 import copy
 from collections import deque
+import json
+import pickle
 
 # All angles are in conventional mathimatical notations (positive angeles are counter-clockwise, 0° starts in the east direction)
 # Works for V2 - V3.3.0
@@ -1202,8 +1204,8 @@ def walls_within_range_array(wall_data, time_array, true_for_range_in_seconds=Fa
         
         if in_range:
             if find_first_objects:
-                objects, wall_indexes = walls_within_range(wall_data, time, true_for_range_in_seconds=true_for_range_in_seconds, time_range=time_range, return_indexs=True)
-                objects = deque(objects)    # Convert from list into queue
+                objects_return, wall_indexes = walls_within_range(wall_data, time, true_for_range_in_seconds=true_for_range_in_seconds, time_range=time_range, return_indexs=True)
+                objects = deque(objects_return)    # Convert from list into queue
                 wall_indexes = deque(wall_indexes)
                 # wall_index_of_first_object = wall_indexes[0]        # Load the starting index
                 # wall_index_of_last_object = wall_indexes[1]         # Load the ending index  
@@ -1218,13 +1220,14 @@ def walls_within_range_array(wall_data, time_array, true_for_range_in_seconds=Fa
                     
                     for fl2 in range(0, len(objects[fl_wall_index]['objects'])):
                         if objects[fl_wall_index]['objects'][fl_group_index][key_f] < lower_bound:
+
                             del objects[fl_wall_index]['objects'][fl_group_index]
                             fl_group_index -= 1
                         fl_group_index += 1
                     
                         if len(objects[fl_wall_index]['objects']) == 0:
                             del objects[fl_wall_index]
-                            del wall_indexes[fl_wall_index]
+                            # del wall_indexes[fl_wall_index]
                             fl_wall_index -= 1
 
                     fl_wall_index += 1
@@ -1240,15 +1243,15 @@ def walls_within_range_array(wall_data, time_array, true_for_range_in_seconds=Fa
 
                         for grouped_wall_index in range(0, len(wall_data[wall_data_index + 1]['objects'])):
                             objects[-1]['objects'].append(wall_data[wall_data_index + 1]['objects'][grouped_wall_index])
-                        wall_indexes.append(wall_data_index + 1)
+                        # wall_indexes.append(wall_data_index + 1)
 
                         if wall_data_index - 1 < len(wall_data) - 1:
                             wall_data_index += 1
-                        else:
-                            # break
-                            pass  
+                        # else:
+                        #     # break
+                        #     pass  
 
-        timed_object_array.append(copy.deepcopy(list(objects)))
+        timed_object_array.append(pickle.loads(pickle.dumps(list(objects))))
 
     return timed_object_array
 
