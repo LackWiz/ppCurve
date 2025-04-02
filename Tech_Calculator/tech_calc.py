@@ -1248,7 +1248,7 @@ def walls_within_range_array(wall_data, time_array, true_for_range_in_seconds=Fa
                             # break
                             pass  
 
-        timed_object_array.append(list(objects))
+        timed_object_array.append(copy.deepcopy(list(objects)))
 
     return timed_object_array
 
@@ -1340,7 +1340,7 @@ def path_analysis(path):
     pass
 
 def swing_path(formatted_map_data, handedness, skill_set):
-    t0 = time.time()
+    
     
     if handedness:
         note_data = formatted_map_data['left_note_data']
@@ -1374,7 +1374,7 @@ def swing_path(formatted_map_data, handedness, skill_set):
     # time_steps = [t * time_step for t in range(0, last_object_time)]
 
     time_steps = range_float(0, last_object_time, time_step, accurate_steps=True)
-
+    t0 = time.time()
     # TODO, calculate the best time range to reduce vision blocks, or use the reaction time formula, or bake set reaction times for every skill level.
     notes_of_interest_at_time_steps = objects_within_range_array(note_data, time_steps, time_range=jump_distance, exclude_within_saber_distance2=True)
     other_notes_of_interest_at_time_steps = objects_within_range_array(other_note_data, time_steps, time_range=jump_distance, exclude_within_saber_distance2=True)
