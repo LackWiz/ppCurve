@@ -626,9 +626,9 @@ def calculate_wall_hitbox(x_pos, y_Pos, width, distance, height):
     hitbox_y1 = (y_Pos + height) * y_grid_distance
     hitbox_z1 = distance * metadata['njs'] + 1
 
-    hitboxPos = {'p0': np.array([hitbox_x0, hitbox_y0, hitbox_z0]), 'p1': np.array([hitbox_x1, hitbox_y1, hitbox_z1])}
+    hitboxPos = {'p0': np.array([hitbox_x0, hitbox_y0, hitbox_z0]), 'p1': np.array([hitbox_x1, hitbox_y1, hitbox_z1]), 'width': hitbox_x1}
 
-    visboxPos = {'p0': np.array([hitbox_x0, hitbox_y0, hitbox_z0 - 0.25]), 'p1': np.array([hitbox_x1, hitbox_y1, hitbox_z1])}   # Subtract 0.25 cause the visible portion of walls just built like that (cred: arcViewer)
+    visboxPos = {'p0': np.array([hitbox_x0, hitbox_y0, hitbox_z0 - 0.25]), 'p1': np.array([hitbox_x1, hitbox_y1, hitbox_z1]), 'width': hitbox_x1}   # Subtract 0.25 cause the visible portion of walls just built like that (cred: arcViewer)
 
 
     return hitboxPos, visboxPos
@@ -1464,9 +1464,9 @@ def swing_path(formatted_map_data, handedness, skill_set):
         for wall in walls_to_avoid:
             
 
-            wall_middle_X = wall['position']['p0'][0] + np.cos(np.radians(wall['rotation'])) * x_grid_distance / 2  # Here cos and sin are swapped when optimizing mod(wall['rotation'] - 90, 360). the -90 comes from converting game rotation to convential math standards.
+            wall_middle_X = wall['position']['p0'][0] + np.cos(np.radians(wall['rotation'])) * wall['position']['width'] / 2  # Here cos and sin are swapped when optimizing mod(wall['rotation'] - 90, 360). the -90 comes from converting game rotation to convential math standards.
             wall_middle_Y = (wall['position']['p1'][1] - wall['position']['p0'][1]) / 2
-            wall_middle_Z = wall['position']['p0'][2] + np.sin(np.radians(wall['rotation'])) * x_grid_distance / 2
+            wall_middle_Z = wall['position']['p0'][2] + np.sin(np.radians(wall['rotation'])) * wall['position']['width'] / 2
             wall_middle = np.array([wall_middle_X, wall_middle_Y, wall_middle_Z])
             rotated_wall_middle = rotate_y(wall_middle, np.array([0,0,0]), wall['rotation']) # rotate wall_center around the center
             wall_delta = wall_middle - head_pos
