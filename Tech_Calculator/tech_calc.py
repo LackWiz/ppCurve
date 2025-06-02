@@ -10,7 +10,6 @@ from scipy.special import comb
 import time
 import copy
 from collections import deque
-import json
 import pickle
 
 # All angles are in conventional mathimatical notations (positive angeles are counter-clockwise, 0° starts in the east direction)
@@ -21,11 +20,12 @@ import pickle
 cut_direction_index = [90, 270, 180, 0, 135, 45, 225, 315, 270]     # mathamatical 0°, direction of cut
 x_grid_distance = 0.43636   # In meters
 y_grid_distance = 0.525   # In meters, averaged 0.55m between bottom and middle row, 0.5m between middle and top row.
+
 # Bombs are roughly equal in size to note badcut hitboxes @ 0.36m
 bomb_offset = [[x_grid_distance / 2 - 0.18, y_grid_distance / 2 - 0.18, 1 - 0.18], [x_grid_distance / 2 + 0.18, y_grid_distance / 2 + 0.18, 1 + 0.18]]     
-saber_hit_distance = 0.5        # The z position where the hitbox will hit the saber. 0 = hilting, 0.5 = mid, 1 = tipping
+saber_hit_distance = 0.5        # The z position where the hitbox will try to hit the saber. 0 = hilting, 0.5 = mid, 1 = tipping.
 refresh_rate = 15              # Simulated refreshrate. Defines the simulation precision
-search_frequency = 64
+
 # ------------------------ Base functions ------------------------
 
 def average(lst, set_len=0):  # Returns the averate of a list of integers
@@ -57,7 +57,7 @@ def lerp(p0, p1, t):
     offset = p0
     return offset + scale * t
 
-def range_float(start, end, step, accurate_steps=False):
+def range_float(start, end, step, accurate_steps=True):
     accum = start
     steps = [start]
     
@@ -67,7 +67,7 @@ def range_float(start, end, step, accurate_steps=False):
             steps.append(step_count * step)
             step_count += 1
     
-    else:
+    else:   # My first solution to this problem. I liked it because it's memory efficient and fast, but accumulating floating point operations starts to make the output messy.
         while accum + step <= end:
             accum += step
             steps.append(accum)
@@ -111,21 +111,6 @@ def s_curve_path(start_point, end_point, max_acceleration, min_resolution, max_g
     points = [start_point + s * directions for s in s_curve_scaled / total_distance]
 
     return points
-
-    # Generate a smooth curve path between two points in 3D space, considering
-    # starting and ending velocities, acceleration limits, resolution, and maximum gap.
-    
-    # Parameters:
-    # starting_position (tuple): Starting point in 3D space (x, y, z).
-    # ending_position (tuple): Ending point in 3D space (x, y, z).
-    # max_acceleration (float): Maximum allowable acceleration.
-    # minimum_resolution (int): Minimum number of steps between points.
-    # maximum_gap (float): Maximum distance allowed between consecutive points.
-    # starting_velocity (tuple): Velocity at the start point (optional, default is (0, 0, 0)).
-    # ending_velocity (tuple): Velocity at the end point (optional, default is (0, 0, 0)).
-
-    # Returns:
-    # list: List of points representing the path in 3D space.
 
 def advanced_s_curve_path(
     starting_position, ending_position, max_acceleration, minimum_resolution,
@@ -910,22 +895,22 @@ def apply_rotation_data(object_data, rotation_data=[]):
 
     for object_index in range(0, len(object_data)):     # Gasp, the double for looop
         for group_index in range(0, len(object_data[object_index]['objects'])):    # Thankfully the len of objectdata at objectindex is nearly always 1, and has a max reasonable size of 12. Either way, it scales with O(n) placed objects
-            if rotation_index < len(rotation_data):
+            if rotation_index <= len(rotation_data) - 1:
                 
                 if inclusive_flag:
                     while object_data[object_index]['beat'] >= rotation_data[rotation_index]['b']:    # While loop to handle cases where there are multiple rotation events between objects
-                        rotation += rotation_data[rotation_index]['r']
+                        rotation += -rotation_data[rotation_index]['r']
                         # test_rotation_changelog.append({'rotation': rotation, 'beat': rotationData[rotationIndex]['b']})
-                        if rotation_index + 1 < len(rotation_data):
+                        if rotation_index + 1 <= len(rotation_data) - 1:
                             rotation_index += 1
                             inclusive_flag = not rotation_data[rotation_index]['e']
                         else:
                             break
                 else:
                     while object_data[object_index]['beat'] > rotation_data[rotation_index]['b']:     # While loop to handle cases where there are multiple rotation events between objects
-                        rotation += rotation_data[rotation_index]['r']
+                        rotation += -rotation_data[rotation_index]['r']
                         # test_rotation_changelog.append({'rotation': rotation, 'beat': rotationData[rotationIndex]['b']})
-                        if rotation_index + 1 < len(rotation_data):
+                        if rotation_index + 1 <= len(rotation_data) - 1:
                             rotation_index += 1
                             inclusive_flag = not rotation_data[rotation_index]['e']
                         else:
@@ -934,14 +919,37 @@ def apply_rotation_data(object_data, rotation_data=[]):
                 p0 = object_data[object_index]['objects'][group_index]['hitbox']['pos_data']['p0']
                 p1 = object_data[object_index]['objects'][group_index]['hitbox']['pos_data']['p1']
                 center = np.array([0,0,0])
-                object_data[object_index]['objects'][group_index]['hitbox']['pos_data']['p0'] = rotate_point(p0, center, 0, -rotation, 0)
-                object_data[object_index]['objects'][group_index]['hitbox']['pos_data']['p1'] = rotate_point(p1, center, 0, -rotation, 0)
-                object_data[object_index]['objects'][group_index]['lane_rotation'] = mod(-rotation, 360)
+                object_data[object_index]['objects'][group_index]['hitbox']['pos_data']['p0'] = rotate_point(p0, center, 0, rotation, 0)
+                object_data[object_index]['objects'][group_index]['hitbox']['pos_data']['p1'] = rotate_point(p1, center, 0, rotation, 0)
+                object_data[object_index]['objects'][group_index]['lane_rotation'] = mod(rotation, 360)
     
     return object_data
 
+def create_rotation_list(rotation_data):
+    if len(rotation_data) == 0:
+        return []
+    
+    rotation = 0        # Current platform rotation (yaw)
+    rotation_index = 0   # Index of future incoming rotation event
+    inclusive_flag = not rotation_data[rotation_index]['e']
+
+    rotation_array = []
+    for rotation_index in range(0, len(rotation_data)):
+        rotation += -rotation_data[rotation_index]['r']
+        # test_rotation_changelog.append({'rotation': rotation, 'beat': rotationData[rotationIndex]['b']})
+        if rotation_index + 1 <= len(rotation_data) - 1:
+            rotation_index += 1
+            inclusive_flag = not rotation_data[rotation_index]['e']
+        else:
+            break   # No more entries in list
+
+        rotation_array.append({'beat': rotation_data[rotation_index]['b'],'rotation': mod(rotation, 360), 'inclusive_flag': inclusive_flag})
+    
+    return rotation_array
+
 # object_data: accepts the formatted_data format
 # I know partial_matching was supposed to be something, but I can't remember...
+search_frequency = 64           # The size of search bucket when splitting lists. Possible to replace with the sqrt of the list size.
 def objects_within_range(object_data, time, partial_matching=True, time_range=1, key='beat', true_for_range_in_seconds=False, exclude_within_saber_distance=False, return_indexs=False):
 
     if len(object_data) == 0:
@@ -989,8 +997,9 @@ def objects_within_range(object_data, time, partial_matching=True, time_range=1,
 
     if exclude_within_saber_distance:
         # TODO update this from a cube to a sphear
-        distance_from_note_time_in_beats = distance_to_beats(metadata['bpm'], metadata['njs'], saber_hit_distance)  # saber_hit_distance: 0m = hilting, 1m = tipping
-        lower_bound = time + distance_from_note_time_in_beats
+        # distance_from_note_time_in_beats = distance_to_beats(metadata['bpm'], metadata['njs'], saber_hit_distance)  # saber_hit_distance: 0m = hilting, 1m = tipping
+        # lower_bound = time + distance_from_note_time_in_beats
+        lower_bound = time
     else:
         lower_bound = time - time_range
 
@@ -1038,9 +1047,6 @@ def objects_within_range_array(object_data, time_array, partial_matching=True, t
     
     timed_object_array = []
 
-    if exclude_within_saber_distance2:
-        saber_distance_from_note_time_in_beats = distance_to_beats(metadata['bpm'], metadata['njs'], saber_hit_distance)  # saber_hit_distance: 0m = hilting, 1m = tipping
-
     first_object_time = object_data[0][key]
     last_object_time = object_data[-1][key]
     
@@ -1076,7 +1082,9 @@ def objects_within_range_array(object_data, time_array, partial_matching=True, t
             
             if exclude_within_saber_distance2:
                 # TODO update this from a cube to a sphear
-                lower_bound = time + saber_distance_from_note_time_in_beats
+                # saber_distance_from_note_time_in_beats = distance_to_beats(metadata['bpm'], metadata['njs'], saber_hit_distance)  # saber_hit_distance: 0m = hilting, 1m = tipping
+                # lower_bound = time + saber_distance_from_note_time_in_beats # Exclude all notes within range and behind player
+                lower_bound = time      # The arrival time is already 1m away from the player :)
             else:
                 lower_bound = time - time_range
 
@@ -1256,32 +1264,16 @@ def walls_within_range_array(wall_data, time_array, true_for_range_in_seconds=Fa
     return timed_object_array
 
 # ------------------------ Algo specific functions ------------------------
-# TODO: Finish
-# hitboxPos: Vector3 (touple of floats)
-# hitboxAngle: Angle3 (touple of floats)
-# strikeAngle: float
-def calculate115(hitbox_pos, hitbox_angle, strike_angle):
-    #0.4 = (x) middle of width of hitbox, (y) 0.5 = top of hitbox, (z) length of hitbox
-    strike_pos = [0.4, 0.5, hitbox_pos['p0'][2] + saber_hit_distance]    # Initializa strike position.
-    
-    if strike_angle != -1:        # If given a swingAngle, calculate exact point on the hitbox to strike for 15 acc
-        x_distance = 0.4 * math.sin(math.radians(strike_angle - hitbox_angle))
-        x_offset = x_distance * math.sin(math.radians(hitbox_angle - 180))
-        y_offset = x_distance * math.cos(math.radians(hitbox_angle - 180))
-    else:
-        x_offset = 0
-        y_offset = 0
 
-    strike_pos[0] += x_offset
-    strike_pos[1] += y_offset
-    # rotated_strikePos = rotatePoint(initStrikePos, center, hitboxAngle[0], hitboxAngle[1], hitboxAngle[2])
-    return strike_pos
+def load_starting_head_pos():   # A players height is used to offset objects (notes, wall,s bombs, etc.) up or down. We don't need to include this so our simulated player will be very short
+    return np.array([2 * x_grid_distance, 2 * y_grid_distance, 0])     # in a 4x3 grid (xy) with position 2x and 2y, the player should be in the middle (x) and top 2/3'rds of the grid and can see between the middle and top notes.
 
 def define_head_pos(wall_data, bomb_data, rotation_data):
 
 
 
     pass
+
 
 
 # 2 ways to do this.
@@ -1359,7 +1351,6 @@ def swing_path(formatted_map_data, handedness, skill_set):
     # jump_distance = skill_set['jump_distance']
     jump_distance = metadata['jump_distance']
 
-    
     accGraph = [[]]
     averageAcc = 0.0    # The acc
     readibility = 0.0   # How much vision block
@@ -1368,15 +1359,13 @@ def swing_path(formatted_map_data, handedness, skill_set):
     position = 0.0      # How much position
     noramlity = 0.0     # How common the pattern is
 
-    head_path = []
-
     last_object_time = max(note_data[-1]['beat'], other_note_data[-1]['beat'], bomb_data[-1]['beat'], wall_data[-1]['beat_f'])
 
     time_step = (1 / refresh_rate) * metadata['bpm'] / 60     # In beats, no need to ever convert to seconds
     # time_data = range(0, last_object_time, time_step)   #  Build an array of time values to determine frames to use. Range function doesn't work with float values ;-;
     # time_steps = [t * time_step for t in range(0, last_object_time)]
 
-    time_steps = range_float(0, last_object_time, time_step, accurate_steps=True)
+    time_steps = range_float(0, last_object_time, time_step)
     t0 = time.time()
     # TODO, calculate the best time range to reduce vision blocks, or use the reaction time formula, or bake set reaction times for every skill level.
     notes_of_interest_at_time_steps = objects_within_range_array(note_data, time_steps, time_range=jump_distance, exclude_within_saber_distance2=True)
@@ -1389,6 +1378,17 @@ def swing_path(formatted_map_data, handedness, skill_set):
 
     index = 0
     head_data_at_time_steps = []
+
+    head_pos = load_starting_head_pos()
+    head_rotation = 90          # Straight forwards. Lane rotation and
+    ave_rotation_queue = deque()
+    lane_rotation_data_index = 0
+    current_lane_rotation = lane_rotation_data[lane_rotation_data_index]['rotation']
+
+    # We could simulate acceleration to simulate inertia, but it's not important.
+    head_rotation_rate = 45         # In degrees / sec
+    head_position_rate = 0.5        # In m/s
+
     for time_index, time_beats in enumerate(time_steps):
 
         notes_of_interest = notes_of_interest_at_time_steps[time_index]
@@ -1396,24 +1396,97 @@ def swing_path(formatted_map_data, handedness, skill_set):
         bombs_of_interest = bombs_of_interest_at_time_steps[time_index]
         walls_of_interest = walls_of_interest_at_time_steps[time_index]
 
-        objects_to_miss = walls_of_interest
-        objects_to_avoid = bombs_of_interest
-
         # First calculate head position, then vision blocks
+        # I need:
+        # Position of area with least walls
+        # Vector from middle to area with least walls
+        # Vector from headpos to area with least walls
+        # 
+        # Apply resistive factors to headpos movement components when movement vector is away from center and sufficient distance.
+
+        moved_past_head_beat_offset = distance_to_beats(metadata['bpm'], metadata['njs'], 1)      # Beat 0 i.e. if the note has "arrived" is 1m in front of the player. THerefore for vision checks, we need to subtract this from the beat/add to the time check
+        
+        walls_to_miss = []
+        walls_to_avoid = []
         for wall_of_int in walls_of_interest:
-            for wall in wall_of_int['objects']:
-                if time_beats > wall_of_int['beat'] and time_beats < wall['beat_f']:
-                    
-                    
-                    pass
-                distance = abs(time_beats - wall_of_int['beat'])
-                time_weight = 0.9 ** distance
+            for wall in wall_of_int['objects']:                 # Wall at player
+                position = wall['visbox']['pos_data']
+                rotation = wall['lane_rotation']
+                if time_beats + moved_past_head_beat_offset >= wall_of_int['beat'] and time_beats + moved_past_head_beat_offset < wall['beat_f']:
+                    distance_beats = 0
+                    distance_seconds = 0
+                    time_weight = 1
+                    walls_to_miss.append({'distance_beats': distance_beats, 'position': position, 'rotation': rotation, 'weight': time_weight})              # Walls must be avoided by the head for a period of time. Lets keep track of them
+                else:
+                    if time_beats + moved_past_head_beat_offset <= wall_of_int['beat']:        # Wall ahead of player
+                        distance_beats = wall_of_int['beat'] - time_beats + moved_past_head_beat_offset     # Distance from wall to players head
+                        distance_seconds = beats_to_seconds(distance_beats, metadata['bpm'])
+                        time_weight = 0.05 ** distance_seconds      # A weight formula
 
-        head_pos = 1
+                    else:       # Wall behind player
+                        distance_beats = wall['beat_f'] - time_beats + moved_past_head_beat_offset
+                        # distance_seconds = beats_to_seconds(distance_beats, metadata['bpm'])
+                        time_weight = 0
+                # Add each wall
+                walls_to_avoid.append({'distance_beats': distance_beats, 'position': position, 'rotation': rotation, 'weight': time_weight})
+        
+        bombs_to_avoid = []
+        for bomb_of_int in bombs_of_interest:
+            for bomb in bomb_of_int['objects']: 
+                position = bomb['visbox']['pos_data']
+                rotation = bomb['lane_rotation']
+                if time_beats + moved_past_head_beat_offset > bomb_of_int['beat']:      # bomb moved past the player
+                    distance_beats = bomb_of_int['beat'] - time_beats + moved_past_head_beat_offset
+                    # distance_seconds = beats_to_seconds(distance_beats, metadata['bpm'])
+                    time_weight = 0     
+                else:     # Bomb ahead of player
+                    distance_beats = bomb_of_int['beat'] - time_beats + moved_past_head_beat_offset
+                    # distance_seconds = beats_to_seconds(distance_beats, metadata['bpm'])
+                    time_weight = 0 
+                bombs_to_avoid.append({'distance_beats': distance_beats, 'position': position, 'rotation': rotation, 'weight': time_weight})
+                
+        # Not going to use notes to calculate head pos
 
+        total_length = len(walls_to_miss) + len(walls_to_avoid) + len(bombs_to_avoid)
+
+
+        if time_beats >= lane_rotation_data[lane_rotation_data_index]['beat']:
+            if lane_rotation_data[lane_rotation_data_index]['inclusive_flag'] or time_beats > lane_rotation_data[lane_rotation_data_index]['beat']:
+                lane_rotation_data_index += 1
+                current_lane_rotation = lane_rotation_data[lane_rotation_data_index]['rotation']
+
+        if abs(current_lane_rotation - head_rotation) > time_step * head_rotation_rate:
+            if current_lane_rotation - head_rotation > 0:
+                head_rotation += time_step * head_rotation_rate
+            elif current_lane_rotation - head_rotation < 0:
+                head_rotation -= time_step * head_rotation_rate
+
+        for wall in walls_to_avoid:
+            
+
+            wall_middle_X = wall['position']['p0'][0] + np.cos(np.radians(wall['rotation'])) * x_grid_distance / 2  # Here cos and sin are swapped when optimizing mod(wall['rotation'] - 90, 360). the -90 comes from converting game rotation to convential math standards.
+            wall_middle_Y = (wall['position']['p1'][1] - wall['position']['p0'][1]) / 2
+            wall_middle_Z = wall['position']['p0'][2] + np.sin(np.radians(wall['rotation'])) * x_grid_distance / 2
+            wall_middle = np.array([wall_middle_X, wall_middle_Y, wall_middle_Z])
+            rotated_wall_middle = rotate_y(wall_middle, np.array([0,0,0]), wall['rotation']) # rotate wall_center around the center
+            wall_delta = wall_middle - head_pos
+            theta_to_player = mod(np.arctan2(wall_delta[2], wall_delta[0]) - mod(wall['rotation'] - 90, 360), 360)  # Subtract lane rotation
+            
+            if theta_to_player - head_rotation < 90 or theta_to_player - head_rotation > 270:
+                head_pos[0] += np.cos(np.radians(head_rotation)) * head_position_rate * wall['weight']
+                head_pos[2] += np.sin(np.radians(head_rotation)) * head_position_rate * wall['weight']
+            else:
+                head_pos[0] -= np.cos(np.radians(head_rotation)) * head_position_rate * wall['weight']
+                head_pos[2] -= np.sin(np.radians(head_rotation)) * head_position_rate * wall['weight']
+
+            
 
         head_data_at_time_steps.append({})
 
+
+        # Vision block calculations
+        walls_visionblock = []
+        walls_visionblock.append(wall)          # At this distance, walls will visionblock
 
 
         
@@ -1473,11 +1546,13 @@ def techOperations(B_mapData: dict, metadata: dict, isuser=True, verbose=True):
     right_note_data = create_note_list(B_RightNoteData)
     bomb_data = create_bomb_list(B_BombData)
     wall_data = create_wall_list(B_WallData)
+    rotation_data = create_rotation_list(B_mapData['rotationEvents'])
     
     left_note_data = apply_rotation_data(left_note_data, B_mapData['rotationEvents'])
     right_note_data = apply_rotation_data(right_note_data, B_mapData['rotationEvents'])
     bomb_data = apply_rotation_data(bomb_data, B_mapData['rotationEvents'])
     wall_data = apply_rotation_data(wall_data, B_mapData['rotationEvents'])
+    
 
     formatted_map_data = {}
     formatted_map_data['left_note_data'] = left_note_data
@@ -1485,7 +1560,7 @@ def techOperations(B_mapData: dict, metadata: dict, isuser=True, verbose=True):
     formatted_map_data['bomb_data'] = bomb_data
     formatted_map_data['wall_data'] = wall_data
     formatted_map_data['metadata'] = metadata
-    formatted_map_data['rotation_events'] = B_mapData['rotationEvents']
+    formatted_map_data['rotation_events'] = rotation_data
 
     left_results = difficulty_analysis(formatted_map_data, 0)
     right_results = difficulty_analysis(formatted_map_data, 1)
