@@ -21,14 +21,14 @@ cut_direction_index = [90, 270, 180, 0, 135, 45, 225, 315, 270]     # mathamatic
 x_grid_distance = 0.43636   # In meters
 y_grid_distance = 0.525   # In meters, averaged 0.55m between bottom and middle row, 0.5m between middle and top row.
 
-# Bombs are roughly equal in size to note badcut hitboxes @ 0.36m
+# Bombs are roughly equal in size to note badcut hitboxes @ 0.36m [[x0,y0,z0],[x1,y1,z1]]
 bomb_offset = [[x_grid_distance / 2 - 0.18, y_grid_distance / 2 - 0.18, 1 - 0.18], [x_grid_distance / 2 + 0.18, y_grid_distance / 2 + 0.18, 1 + 0.18]]     
 saber_hit_distance = 0.5        # The z position where the hitbox will try to hit the saber. 0 = hilting, 0.5 = mid, 1 = tipping.
 refresh_rate = 15              # Simulated refreshrate. Defines the simulation precision
 
 # ------------------------ Base functions ------------------------
 
-def average(lst, set_len=0):  # Returns the averate of a list of integers
+def average(lst: list[int], set_len=0) -> float:  # Returns the averate of a list of integers
     if len(lst) > 0:
         if set_len == 0:
             return sum(lst) / len(lst)
@@ -37,13 +37,13 @@ def average(lst, set_len=0):  # Returns the averate of a list of integers
     else:
         return 0
 
-def reverse_cut_direction(angle):
+def reverse_cut_direction(angle) -> float:
     if angle >= 180:
         return angle - 180
     else:
         return angle + 180
 
-def swap_positions(lis: list, pos1, pos2):
+def swap_positions(lis: list[int], pos1, pos2):
     lis[pos1], lis[pos2] = lis[pos2], lis[pos1]
     return lis
 
@@ -162,17 +162,17 @@ def advanced_s_curve_path(
     return points
 
 # Not the correct way to define function input type, but it'll help someone.
-def point_on_quad_bezier(p0: np.array, p1: np.array, p2: np.array, t):
+def point_on_quad_bezier(p0: np.ndarray, p1: np.ndarray, p2: np.ndarray, t):
     return (math.pow(1 - t, 2) * p0) + (2 * (1 - t) * t * p1) + (math.pow(t, 2) * p2)
 
-def angle_on_quad_bezier(p0: np.array, p1: np.array, p2: np.array, t):
+def angle_on_quad_bezier(p0: np.ndarray, p1: np.ndarray, p2: np.ndarray, t):
     derivative = list((2 * (1 - t) * (p1 - p0)) + (2 * t * (p2 - p1)))      # Pretty sure can remove "list()" but will do later. Not important
     return mod(math.degrees(math.atan2(derivative[1], derivative[0])), 360)
 
-def point_on_cubic_bezier(p0: np.array, p1: np.array, p2: np.array, p3: np.array, t):
+def point_on_cubic_bezier(p0: np.ndarray, p1: np.ndarray, p2: np.ndarray, p3: np.ndarray, t):
     return (math.pow(1 - t, 3) * p0) + (3 * math.pow(1 - t, 2) * t * p1) + (3 * (1 - t) * math.pow(t, 2) * p2) + (math.pow(t, 3) * p3)
 
-def angle_on_cubic_bezier(p0: np.array, p1: np.array, p2: np.array, p3: np.array, t):
+def angle_on_cubic_bezier(p0: list, p1: np.ndarray, p2: np.ndarray, p3: np.ndarray, t):
     derivative = list((3 * math.pow(1 - t, 2) * (p1 - p0)) + (6 * (1 - t) * t * (p2 - p1)) + (3 * math.pow(t, 2) * (p3 - p2)))      # Pretty sure can remove "list()" but will do later. Not important
     return mod(math.degrees(math.atan2(derivative[1], derivative[0])), 360)
 
@@ -213,7 +213,7 @@ def rotate_point(p0, center, pitch, yaw, roll):
     roll = np.deg2rad(roll)
 
     new_p0 = rotate_x(p0, center, pitch)
-    new_p0 = rotate_y(new_p0, center, -yaw)
+    new_p0 = rotate_y(new_p0, center, yaw)
     new_p0 = rotate_z(new_p0, center, roll)
     return np.array(new_p0)
 
@@ -542,10 +542,10 @@ def calc_note_hitbox(block_position, block_angle):
     y_ang = np.arccos(x_note_pos_relative_to_center / (saber_hit_distance + 0.85))    #  saber length + 0.85 forward z hitbox. 0° is straight forwards, +angle is CC, -angle is clockwise.
     z_ang = block_angle
 
-    # Initialize point positions for hitbox caluclations in world space
-    p0 = np.array([0 + block_position[0] * x_grid_distance, 0 + block_position[1] * y_grid_distance, 0.15])         # front left corner 
-    p1 = np.array([0.8 + block_position[0] * x_grid_distance, 0.5 + block_position[1] * y_grid_distance, 1.15])     # back right corner
-    center = np.array([0.4 + block_position[0] * x_grid_distance, 0.25 + block_position[1] * y_grid_distance, 1])   # center of cube 
+    # Initialize point positions for hitbox caluclations in world space [x,y,z]
+    p0 = np.array([0 + (block_position[0] - 2) * x_grid_distance, 0 + block_position[1] * y_grid_distance, 0.15])         # front left corner 
+    p1 = np.array([0.8 + (block_position[0] - 2) * x_grid_distance, 0.5 + block_position[1] * y_grid_distance, 1.15])     # back right corner (0.8m (block width) - 2
+    center = np.array([0.4 + (block_position[0] - 2) * x_grid_distance, 0.25 + block_position[1] * y_grid_distance, 1])   # center of cube 
     
     # Apply rotation transformes
     rotated_p0 = rotate_point(p0, center, x_ang, y_ang, z_ang)
@@ -580,10 +580,10 @@ def calc_note_visbox(block_position, block_angle):
     y_ang = np.arccos(x_note_pos_relative_to_center / (saber_hit_distance + 0.85))    #  saber length + 0.85 forward z hitbox. 0° is straight forwards, +angle is CC, -angle is clockwise.
     z_ang = block_angle
 
-    # Initialize point positions for visbox caluclations in world space with dimentions x = 0.47m, y = 0.47m, z = 0.4m. Can simplify later for speed
-    p0 = np.array([(block_position[0] + 0.5) * x_grid_distance - 0.47 / 2,(block_position[1] + 0.5) * y_grid_distance - 0.47 / 2, 1 - 0.2])         # front left corner 
-    p1 = np.array([(block_position[0] + 0.5) * x_grid_distance + 0.47 / 2,(block_position[1] + 0.5) * y_grid_distance + 0.47 / 2, 1 + 0.2])     # back right corner
-    center = np.array([0.4 + block_position[0] * x_grid_distance, 0.25 + block_position[1] * y_grid_distance, 1])   # center of cube 
+    # Initialize point positions for visbox caluclations in world space with dimentions x = 0.47m, y = 0.47m, z = 0.4m. Can optimize simple calculations later. -2 because the X center is at block grid position 2. 0.5 because we want to find the center of where it occupies
+    p0 = np.array([(block_position[0] - 2 + 0.5) * x_grid_distance - (0.47 / 2),(block_position[1] - 2 + 0.5) * y_grid_distance - (0.47 / 2), 1 - 0.2])         # front left corner 
+    p1 = np.array([(block_position[0] - 2 + 0.5) * x_grid_distance + (0.47 / 2),(block_position[1] - 2 + 0.5) * y_grid_distance + (0.47 / 2), 1 + 0.2])     # back right corner
+    center = np.array([(block_position[0] - 2 + 0.5) * x_grid_distance, 0.25 + block_position[1] * y_grid_distance, 1])   # center of cube 
     
     # Apply rotation transformes
     rotated_p0 = rotate_point(p0, center, x_ang, y_ang, z_ang)
@@ -606,10 +606,11 @@ def calc_note_visbox(block_position, block_angle):
     return block_data
 
 def calculate_bomb_hitbox(b_pos: list):
-    hitbox_x0 = b_pos[0] * x_grid_distance + bomb_offset[0][0]
+    # This program approximates sphears as 0.36m x 0.36m x 0.36 cubes bomb_offset[p0 = 0, p1 = 1][x = 0, y = 1]
+    hitbox_x0 = (b_pos[0] - 2) * x_grid_distance + bomb_offset[0][0]
     hitbox_y0 = b_pos[1] * y_grid_distance + bomb_offset[0][1]
     hitbox_z0 = bomb_offset[0][2]
-    hitbox_x1 = b_pos[0] * x_grid_distance + bomb_offset[1][0]
+    hitbox_x1 = (b_pos[0] - 2) * x_grid_distance + bomb_offset[1][0]
     hitbox_y1 = b_pos[1] * y_grid_distance + bomb_offset[1][1]
     hitbox_z1 = bomb_offset[1][2]
 
@@ -618,20 +619,20 @@ def calculate_bomb_hitbox(b_pos: list):
     return hitbox, visbox
 
 def calculate_wall_hitbox(x_pos, y_Pos, width, distance, height):
-    hitbox_x0 = x_pos * x_grid_distance
+    hitbox_x0 = (x_pos - 2) * x_grid_distance
     hitbox_y0 = y_Pos * y_grid_distance
     # hitboxZ1 = -0.25                          
     hitbox_z0 = 1                                
-    hitbox_x1 = (x_pos + width) * x_grid_distance
+    hitbox_x1 = (x_pos - 2 + width) * x_grid_distance
     hitbox_y1 = (y_Pos + height) * y_grid_distance
     hitbox_z1 = distance * metadata['njs'] + 1
 
-    hitboxPos = {'p0': np.array([hitbox_x0, hitbox_y0, hitbox_z0]), 'p1': np.array([hitbox_x1, hitbox_y1, hitbox_z1]), 'width': hitbox_x1}
+    hitbox_pos = {'p0': np.array([hitbox_x0, hitbox_y0, hitbox_z0]), 'p1': np.array([hitbox_x1, hitbox_y1, hitbox_z1]), 'width': hitbox_x1}
 
-    visboxPos = {'p0': np.array([hitbox_x0, hitbox_y0, hitbox_z0 - 0.25]), 'p1': np.array([hitbox_x1, hitbox_y1, hitbox_z1]), 'width': hitbox_x1}   # Subtract 0.25 cause the visible portion of walls just built like that (cred: arcViewer)
+    visbox_pos = {'p0': np.array([hitbox_x0, hitbox_y0, hitbox_z0 - 0.25]), 'p1': np.array([hitbox_x1, hitbox_y1, hitbox_z1]), 'width': hitbox_x1}   # Subtract 0.25 cause the visible portion of walls just built like that (cred: arcViewer)
 
 
-    return hitboxPos, visboxPos
+    return hitbox_pos, visbox_pos
 
 def chain_curve(chain_data):
     distance = math.sqrt(math.pow((chain_data['x'] - chain_data['tx']), 2) + math.pow((chain_data['y'] - chain_data['ty']), 2))
@@ -671,7 +672,7 @@ def note_angle_snapping(note_group):   # Expects an array size of 2
     # Case 2: All dot notes         Angle adjust all dot notes.
     
     if len(note_group) != 2:
-        print("Note Angle Snapping Function error")
+        print(f"Note Angle Snapping only works with 2 notes. There's {len(note_group)} notes here")
         return
 
     dot_count = 0
@@ -686,7 +687,7 @@ def note_angle_snapping(note_group):   # Expects an array size of 2
                 note_angle = cut_direction_index[note_group[0]['d']]
 
                 angle_from_position = mod(math.degrees(math.atan2(note_group[0]['y'] - note_group[1]['y'], note_group[0]['x'] - note_group[1]['x'])), 360)
-                mirrored_angle_from_position = mod(angle_from_position + 180, 360)
+                mirrored_angle_from_position = mod(angle_from_position + 180, 360)  # Need to check both directions since there's no guarentee on the note order for simultaneous objects
 
                 if abs(note_angle - angle_from_position) <= 22.5:
                     note_angles.append(angle_from_position)
@@ -783,7 +784,7 @@ def create_note_list(object_data: dict):
 
             current_note = grouped_notes[grouped_note_index]
 
-            hitbox_pos_data, visbox_pos_data = calc_note_hitbox([current_note['x'], current_note['y']], note_angles[grouped_note_index])     
+            hitbox_pos_data, visbox_pos_data = calc_note_hitbox([current_note['x'], current_note['y']], note_angles[grouped_note_index])      # type: ignore
             
             if current_note['has_chain']:
                 link_num, link_pos, link_angle, link_beat = chain_curve(current_note['chain_data'])
@@ -884,7 +885,7 @@ def apply_rotation_data(object_data, rotation_data=[]):
     if len(rotation_data) == 0:
         return object_data
     
-    rotation = 0        # Current platform rotation (yaw)
+    rotation = 90        # Current platform rotation (yaw)
     rotation_index = 0   # Index of future incoming rotation event
     inclusive_flag = not rotation_data[rotation_index]['e']
     # test_rotation_changelog = []
@@ -929,13 +930,13 @@ def create_rotation_list(rotation_data):
     if len(rotation_data) == 0:
         return []
     
-    rotation = 0        # Current platform rotation (yaw)
+    rotation = 90        # Current platform rotation (yaw)
     rotation_index = 0   # Index of future incoming rotation event
     inclusive_flag = not rotation_data[rotation_index]['e']
 
     rotation_array = []
     for rotation_index in range(0, len(rotation_data)):
-        rotation += -rotation_data[rotation_index]['r']
+        rotation += -rotation_data[rotation_index]['r']     # Negative because we're using counter clockwise rotation for calculations
         # test_rotation_changelog.append({'rotation': rotation, 'beat': rotationData[rotationIndex]['b']})
         if rotation_index + 1 <= len(rotation_data) - 1:
             rotation_index += 1
@@ -948,7 +949,7 @@ def create_rotation_list(rotation_data):
     return rotation_array
 
 # object_data: accepts the formatted_data format
-# I know partial_matching was supposed to be something, but I can't remember...
+# partial_matching was supposed to be if only a part of the hitbox is in the time selection, not important (For now)
 search_frequency = 64           # The size of search bucket when splitting lists. Possible to replace with the sqrt of the list size.
 def objects_within_range(object_data, time, partial_matching=True, time_range=1, key='beat', true_for_range_in_seconds=False, exclude_within_saber_distance=False, return_indexs=False):
 
@@ -1449,7 +1450,7 @@ def swing_path(formatted_map_data, handedness, skill_set):
 
         total_length = len(walls_to_miss) + len(walls_to_avoid) + len(bombs_to_avoid)
 
-
+        # Head rotation controller
         if time_beats >= lane_rotation_data[lane_rotation_data_index]['beat']:
             if lane_rotation_data[lane_rotation_data_index]['inclusive_flag'] or time_beats > lane_rotation_data[lane_rotation_data_index]['beat']:
                 lane_rotation_data_index += 1
@@ -1457,27 +1458,32 @@ def swing_path(formatted_map_data, handedness, skill_set):
 
         if abs(current_lane_rotation - head_rotation) > time_step * head_rotation_rate:
             if current_lane_rotation - head_rotation > 0:
-                head_rotation += time_step * head_rotation_rate
+                head_rotation += time_step * head_rotation_rate         # seconds * degrees/s = degrees
             elif current_lane_rotation - head_rotation < 0:
                 head_rotation -= time_step * head_rotation_rate
+        else:
+            head_rotation = current_lane_rotation
 
+        objects_to_avoid = walls_to_avoid + bombs_to_avoid
+        # TODO Run bombs first, then refine with walls_avoid for smooth head pathing. then check walls_miss to make sure all walls are missed
         for wall in walls_to_avoid:
-            
-
-            wall_middle_X = wall['position']['p0'][0] + np.cos(np.radians(wall['rotation'])) * wall['position']['width'] / 2  # Here cos and sin are swapped when optimizing mod(wall['rotation'] - 90, 360). the -90 comes from converting game rotation to convential math standards.
+            wall_middle_X = wall['position']['p0'][0] + np.cos(np.radians(wall['rotation'])) * wall['position']['width'] / 2  # Here cos and sin are swapped when optimizing mod(wall['rotation'] - 90, 360). the -90 comes from converting game rotation to convential math. I did it this way because I was lazy and adopted the game's rotation notation but reversed (counter-clockwise). TODO make the XZ plane's rotation origins start pointing East (right)
             wall_middle_Y = (wall['position']['p1'][1] - wall['position']['p0'][1]) / 2
             wall_middle_Z = wall['position']['p0'][2] + np.sin(np.radians(wall['rotation'])) * wall['position']['width'] / 2
             wall_middle = np.array([wall_middle_X, wall_middle_Y, wall_middle_Z])
-            rotated_wall_middle = rotate_y(wall_middle, np.array([0,0,0]), wall['rotation']) # rotate wall_center around the center
+            # rotated_wall_middle = rotate_y(wall_middle, np.array([0,0,0]), wall['rotation']) # rotate wall_center around the center. why lol
+            
             wall_delta = wall_middle - head_pos
             theta_to_player = mod(np.arctan2(wall_delta[2], wall_delta[0]) - mod(wall['rotation'] - 90, 360), 360)  # Subtract lane rotation
             
+            
             if theta_to_player - head_rotation < 90 or theta_to_player - head_rotation > 270:
-                head_pos[0] += np.cos(np.radians(head_rotation)) * head_position_rate * wall['weight']
+                head_pos[0] += np.cos(np.radians(head_rotation)) * head_position_rate * wall['weight']  # Use head_rotation to calculate the magnitude of XZ movement
                 head_pos[2] += np.sin(np.radians(head_rotation)) * head_position_rate * wall['weight']
             else:
                 head_pos[0] -= np.cos(np.radians(head_rotation)) * head_position_rate * wall['weight']
                 head_pos[2] -= np.sin(np.radians(head_rotation)) * head_position_rate * wall['weight']
+
 
             
 
@@ -1542,10 +1548,10 @@ def techOperations(B_mapData: dict, metadata: dict, isuser=True, verbose=True):
     B_RightNoteData = split_map_data(B_mapData, 1)
     B_BombData = split_map_data(B_mapData, 2)
     B_WallData = split_map_data(B_mapData, 3)
-    left_note_data = create_note_list(B_LeftNoteData)    # Create extract object data with game mechanics
-    right_note_data = create_note_list(B_RightNoteData)
-    bomb_data = create_bomb_list(B_BombData)
-    wall_data = create_wall_list(B_WallData)
+    left_note_data = create_note_list(dict(B_LeftNoteData))    # Create extract object data with game mechanics
+    right_note_data = create_note_list(dict(B_RightNoteData))   
+    bomb_data = create_bomb_list(list(B_BombData))
+    wall_data = create_wall_list(list(B_WallData))
     rotation_data = create_rotation_list(B_mapData['rotationEvents'])
     
     left_note_data = apply_rotation_data(left_note_data, B_mapData['rotationEvents'])
