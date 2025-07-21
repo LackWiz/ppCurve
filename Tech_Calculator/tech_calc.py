@@ -11,6 +11,7 @@ import time
 import copy
 from collections import deque
 import pickle
+import json
 
 # All angles are in conventional mathimatical notations (positive angeles are counter-clockwise, 0° starts in the east direction)
 # Works for V2 - V3.3.0
@@ -25,6 +26,39 @@ y_grid_distance = 0.525   # In meters, averaged 0.55m between bottom and middle 
 bomb_offset = [[x_grid_distance / 2 - 0.18, y_grid_distance / 2 - 0.18, 1 - 0.18], [x_grid_distance / 2 + 0.18, y_grid_distance / 2 + 0.18, 1 + 0.18]]     
 saber_hit_distance = 0.5        # The z position where the hitbox will try to hit the saber. 0 = hilting, 0.5 = mid, 1 = tipping.
 refresh_rate = 15              # Simulated refreshrate. Defines the simulation precision
+
+# Debug functions
+
+def convert_for_json(obj):
+    """Recursively convert objects to be JSON serializable."""
+    if isinstance(obj, np.ndarray):
+        return obj.tolist()
+    elif isinstance(obj, (np.integer, np.int32, np.int64)):
+        return int(obj)
+    elif isinstance(obj, (np.floating, np.float32, np.float64)):
+        return float(obj)
+    elif isinstance(obj, (np.bool_)):
+        return bool(obj)
+    elif isinstance(obj, dict):
+        return {convert_for_json(k): convert_for_json(v) for k, v in obj.items()}
+    elif isinstance(obj, (list, tuple, set)):
+        return [convert_for_json(i) for i in obj]
+    else:
+        return obj
+
+# copy paste this into debug console to export: export_data(note_data, bomb_data, wall_data)
+def export_data(note_data, bomb_data, wall_data):
+    export_note_data = convert_for_json(note_data)
+    export_bomb_data = convert_for_json(bomb_data)
+    export_wall_data = convert_for_json(wall_data)
+
+    with open("_TestFiles\\note_data.json", "w") as f:
+        json.dump(export_note_data, f, indent=4)
+    with open("_TestFiles\\bomb_data.json", "w") as f:
+        json.dump(export_bomb_data, f, indent=4)
+    with open("_TestFiles\\wall_data.json", "w") as f:
+        json.dump(export_wall_data, f, indent=4)
+
 
 # ------------------------ Base functions ------------------------
 
@@ -224,7 +258,7 @@ def combine_and_sort_list(array1, array2, key):
 
 # ------------------------ Map parsing and information extraction functions ------------------------
 
-def V2_to_V3(V2_map_data: dict):    # Convert V2 JSON to V3
+def V2_to_V3_NJS(V2_map_data: dict, njs: float):    # Convert V2 JSON to V3
     new_map_data = {'colorNotes':[], 'bombNotes':[], 'obstacles':[], 'sliders':[], 'burstSliders':[]}
     for i in range(0, len(V2_map_data['_notes'])):
         if V2_map_data['_notes'][i]['_type'] in [0, 1]:
@@ -234,10 +268,14 @@ def V2_to_V3(V2_map_data: dict):    # Convert V2 JSON to V3
             new_map_data['colorNotes'][-1]['a'] = 0
             new_map_data['colorNotes'][-1]['c'] = V2_map_data['_notes'][i]['_type']
             new_map_data['colorNotes'][-1]['d'] = V2_map_data['_notes'][i]['_cutDirection']
+            new_map_data['colorNotes'][-1]['njs'] = njs
+            # new_map_data['colorNotes'][-1]['bpm'] = bpm
         elif V2_map_data['_notes'][i]['_type'] == 3:      # Bombs
             new_map_data['bombNotes'].append({'b': V2_map_data['_notes'][i]['_time']})
             new_map_data['bombNotes'][-1]['x'] = V2_map_data['_notes'][i]['_lineIndex']
             new_map_data['bombNotes'][-1]['y'] = V2_map_data['_notes'][i]['_lineLayer']
+            new_map_data['bombNotes'][-1]['njs'] = njs
+            # new_map_data['bombNotes'][-1]['bpm'] = bpm
     for i in range (0, len(V2_map_data['_obstacles'])):
         new_map_data['obstacles'].append({'b': V2_map_data['_obstacles'][i]['_time']})
         new_map_data['obstacles'][-1]['x'] = V2_map_data['_obstacles'][i]['_lineIndex']
@@ -249,12 +287,12 @@ def V2_to_V3(V2_map_data: dict):    # Convert V2 JSON to V3
             new_map_data['obstacles'][-1]['h'] = 5
         new_map_data['obstacles'][-1]['d'] = V2_map_data['_obstacles'][i]['_duration']
         new_map_data['obstacles'][-1]['w'] = V2_map_data['_obstacles'][i]['_width']
-
-
+        new_map_data['obstacles'][-1]['njs'] = njs
+        # new_map_data['obstacles'][-1]['bpm'] = bpm
     return new_map_data
 
-def V3_3_0_to_V3(V3_0_0_map_data: dict):
-    new_map_data = copy.deepcopy(V3_0_0_map_data)
+def V3_3_0_to_V3_NJS(V3_3_0_map_data: dict, njs: float):
+    new_map_data = copy.deepcopy(V3_3_0_map_data)
     for i in range(0, len(new_map_data['bpmEvents'])):
         new_map_data['bpmEvents'][i]['b'] = new_map_data['bpmEvents'][i].get('b', 0)
         new_map_data['bpmEvents'][i]['m'] = new_map_data['bpmEvents'][i].get('m', 0)
@@ -271,11 +309,13 @@ def V3_3_0_to_V3(V3_0_0_map_data: dict):
         new_map_data['colorNotes'][i]['a'] = new_map_data['colorNotes'][i].get('a', 0)
         new_map_data['colorNotes'][i]['c'] = new_map_data['colorNotes'][i].get('c', 0)
         new_map_data['colorNotes'][i]['d'] = new_map_data['colorNotes'][i].get('d', 0)
+        new_map_data['colorNotes'][i]['njs'] = njs
     
     for i in range(0, len(new_map_data['bombNotes'])):
         new_map_data['bombNotes'][i]['b'] = new_map_data['bombNotes'][i].get('b', 0)
         new_map_data['bombNotes'][i]['x'] = new_map_data['bombNotes'][i].get('x', 0)
         new_map_data['bombNotes'][i]['y'] = new_map_data['bombNotes'][i].get('y', 0)
+        new_map_data['bombNotes'][i]['njs'] = njs
     
     for i in range(0, len(new_map_data['obstacles'])):
         new_map_data['obstacles'][i]['b'] = new_map_data['obstacles'][i].get('b', 0)
@@ -284,6 +324,7 @@ def V3_3_0_to_V3(V3_0_0_map_data: dict):
         new_map_data['obstacles'][i]['d'] = new_map_data['obstacles'][i].get('d', 0)
         new_map_data['obstacles'][i]['w'] = new_map_data['obstacles'][i].get('w', 0)
         new_map_data['obstacles'][i]['h'] = new_map_data['obstacles'][i].get('h', 0)
+        new_map_data['obstacles'][i]['njs'] = njs
 
     for i in range(0, len(new_map_data['sliders'])):   # Arcs not implemented in the also, so just leave it out.
         new_map_data['sliders'][i]['b'] = new_map_data['sliders'][i].get('b', 0)
@@ -313,7 +354,72 @@ def V3_3_0_to_V3(V3_0_0_map_data: dict):
 
     return new_map_data
     
-def map_prep(map_data):
+def V3_0_0_to_V3_NJS(V3_0_0_map_data: dict, njs: float):    # This function is identical to function V3_3_0_to_V3_NJS, I made them different functions just because it's easier to read.
+    new_map_data = copy.deepcopy(V3_0_0_map_data)
+    for i in range(0, len(new_map_data['bpmEvents'])):
+        new_map_data['bpmEvents'][i]['b'] = new_map_data['bpmEvents'][i].get('b', 0)
+        new_map_data['bpmEvents'][i]['m'] = new_map_data['bpmEvents'][i].get('m', 0)
+
+    # for i in range(0, len(newMapData['rotationEvents'])): Used for lighting
+    #     newMapData['rotationEvents'][i]['b'] = newMapData['rotationEvents'][i].get('b', 0)
+    #     newMapData['rotationEvents'][i]['e'] = newMapData['rotationEvents'][i].get('e', 0)
+    #     newMapData['rotationEvents'][i]['r'] = newMapData['rotationEvents'][i].get('r', 0)
+
+    for i in range(0, len(new_map_data['colorNotes'])):
+        new_map_data['colorNotes'][i]['b'] = new_map_data['colorNotes'][i].get('b', 0)
+        new_map_data['colorNotes'][i]['x'] = new_map_data['colorNotes'][i].get('x', 0)
+        new_map_data['colorNotes'][i]['y'] = new_map_data['colorNotes'][i].get('y', 0)
+        new_map_data['colorNotes'][i]['a'] = new_map_data['colorNotes'][i].get('a', 0)
+        new_map_data['colorNotes'][i]['c'] = new_map_data['colorNotes'][i].get('c', 0)
+        new_map_data['colorNotes'][i]['d'] = new_map_data['colorNotes'][i].get('d', 0)
+        new_map_data['colorNotes'][i]['njs'] = njs
+    
+    for i in range(0, len(new_map_data['bombNotes'])):
+        new_map_data['bombNotes'][i]['b'] = new_map_data['bombNotes'][i].get('b', 0)
+        new_map_data['bombNotes'][i]['x'] = new_map_data['bombNotes'][i].get('x', 0)
+        new_map_data['bombNotes'][i]['y'] = new_map_data['bombNotes'][i].get('y', 0)
+        new_map_data['bombNotes'][i]['njs'] = njs
+    
+    for i in range(0, len(new_map_data['obstacles'])):
+        new_map_data['obstacles'][i]['b'] = new_map_data['obstacles'][i].get('b', 0)
+        new_map_data['obstacles'][i]['x'] = new_map_data['obstacles'][i].get('x', 0)
+        new_map_data['obstacles'][i]['y'] = new_map_data['obstacles'][i].get('y', 0)
+        new_map_data['obstacles'][i]['d'] = new_map_data['obstacles'][i].get('d', 0)
+        new_map_data['obstacles'][i]['w'] = new_map_data['obstacles'][i].get('w', 0)
+        new_map_data['obstacles'][i]['h'] = new_map_data['obstacles'][i].get('h', 0)
+        new_map_data['obstacles'][i]['njs'] = njs
+
+    for i in range(0, len(new_map_data['sliders'])):   # Arcs not implemented in the also, so just leave it out.
+        new_map_data['sliders'][i]['b'] = new_map_data['sliders'][i].get('b', 0)
+        new_map_data['sliders'][i]['c'] = new_map_data['sliders'][i].get('c', 0)
+        new_map_data['sliders'][i]['x'] = new_map_data['sliders'][i].get('x', 0)
+        new_map_data['sliders'][i]['y'] = new_map_data['sliders'][i].get('y', 0)
+        new_map_data['sliders'][i]['d'] = new_map_data['sliders'][i].get('d', 0)
+        new_map_data['sliders'][i]['mu'] = new_map_data['sliders'][i].get('mu', 0)
+        new_map_data['sliders'][i]['tb'] = new_map_data['sliders'][i].get('tb', 0)
+        new_map_data['sliders'][i]['tx'] = new_map_data['sliders'][i].get('tx', 0)
+        new_map_data['sliders'][i]['ty'] = new_map_data['sliders'][i].get('ty', 0)
+        new_map_data['sliders'][i]['tc'] = new_map_data['sliders'][i].get('tc', 0)
+        new_map_data['sliders'][i]['tmu'] = new_map_data['sliders'][i].get('tmu', 0)
+        new_map_data['sliders'][i]['m'] = new_map_data['sliders'][i].get('m', 0)
+
+    for i in range(0, len(new_map_data['burstSliders'])):
+        new_map_data['burstSliders'][i]['b'] = new_map_data['burstSliders'][i].get('b', 0)
+        new_map_data['burstSliders'][i]['c'] = new_map_data['burstSliders'][i].get('c', 0)
+        new_map_data['burstSliders'][i]['x'] = new_map_data['burstSliders'][i].get('x', 0)
+        new_map_data['burstSliders'][i]['y'] = new_map_data['burstSliders'][i].get('y', 0)
+        new_map_data['burstSliders'][i]['d'] = new_map_data['burstSliders'][i].get('d', 0)
+        new_map_data['burstSliders'][i]['tb'] = new_map_data['burstSliders'][i].get('tb', 0)
+        new_map_data['burstSliders'][i]['tx'] = new_map_data['burstSliders'][i].get('tx', 0)
+        new_map_data['burstSliders'][i]['ty'] = new_map_data['burstSliders'][i].get('ty', 0)
+        new_map_data['burstSliders'][i]['sc'] = new_map_data['burstSliders'][i].get('sc', 8)
+        new_map_data['burstSliders'][i]['s'] = new_map_data['burstSliders'][i].get('s', 1)
+
+    return new_map_data
+
+
+
+def map_prep(map_data, metadata):
     try:
         map_version = parse(map_data['version'])
     except KeyError:
@@ -330,12 +436,13 @@ def map_prep(map_data):
                 except KeyError:
                     print("Unknown Map Type. Exiting")
                     exit()
+    njs = metadata['njs']
     if map_version < parse('3.0.0'):  # Try to figure out if the map is the V2 or V3 format
-        new_map_data = V2_to_V3(map_data)  # Convert to V3
+        new_map_data = V2_to_V3_NJS(map_data, njs)  # Convert to V3
     elif map_version < parse('3.3.0'):
-        new_map_data = map_data
+        new_map_data = V3_0_0_to_V3_NJS(map_data, njs)
     elif map_version < parse('4.0.0'):       # New 3.3.0 spec omits default values, so we need to fill them in
-        new_map_data = V3_3_0_to_V3(map_data)
+        new_map_data = V3_3_0_to_V3_NJS(map_data, njs)
     else:
         # new_map_data = V4_4_0_to_V3(map_data)     #TODO develop 4.0.0 to V3
         pass
@@ -766,11 +873,9 @@ def create_note_list(object_data: dict):
 
         if len(grouped_notes) != 2:      # Snap precision angle adjustment only happens with 2 notes.
             for forloop_index in range(0, len(grouped_notes)):
-                if grouped_notes[forloop_index]['d'] == 8:
-                    is_dot = True
+                if grouped_notes[forloop_index]['d'] == 8:                
                     note_angles.append(mod(grouped_notes[forloop_index]['a'], 360))
                 else:
-                    is_dot = False
                     note_angles.append(mod(cut_direction_index[grouped_notes[forloop_index]['d']] + grouped_notes[forloop_index]['a'], 360))       # Get block angle, including precision angle
 
         else:       # Multiple notes at the same time can alter note angles
@@ -779,6 +884,7 @@ def create_note_list(object_data: dict):
         note_data.append({})
         note_data[-1]['beat'] = grouped_notes[0]['b']                          #Float
         note_data[-1]['objects'] = []
+        note_data[-1]['njs'] = grouped_notes[0]['njs']
 
         for grouped_note_index in range(0, len(grouped_notes)):
 
@@ -789,8 +895,10 @@ def create_note_list(object_data: dict):
             if current_note['has_chain']:
                 link_num, link_pos, link_angle, link_beat = chain_curve(current_note['chain_data'])
                 
-
-
+            if current_note['d'] == 8:
+                is_dot = True
+            else:
+                is_dot = False
             
             note_data[-1]['objects'].append({})
 
@@ -831,6 +939,7 @@ def create_bomb_list(bombs: list):
         bomb_data.append({})
         bomb_data[-1]['beat'] = same_time[0]['b']
         bomb_data[-1]['objects'] = []
+        bomb_data[-1]['njs'] = same_time[0]['njs']
 
         for j in range(0, len(same_time)):
             bomb_pos = [same_time[j]['x'], same_time[j]['y']]
@@ -862,7 +971,8 @@ def create_wall_list(walls: list):
         wall_data[-1]['beat'] = same_time[0]['b']
         group_beat_f = same_time[0]['b']
         wall_data[-1]['objects'] = []
-        
+        wall_data[-1]['njs'] = same_time[0]['njs']
+
         for j in range(0, len(same_time)):
             hitbox_data, visbox_data = calculate_wall_hitbox(same_time[j]['x'], same_time[j]['y'], same_time[j]['w'], same_time[j]['d'], same_time[j]['h'])
             wall_data[-1]['objects'].append({'hitbox': {'pos_data': {}}, 'visbox': {'pos_data': {}}})
@@ -944,7 +1054,7 @@ def create_rotation_list(rotation_data):
         else:
             break   # No more entries in list
 
-        rotation_array.append({'beat': rotation_data[rotation_index]['b'],'rotation': mod(rotation, 360), 'inclusive_flag': inclusive_flag})
+        rotation_array.append({'beat': rotation_data[rotation_index]['b'],'lane_rotation': mod(rotation, 360), 'inclusive_flag': inclusive_flag})
     
     return rotation_array
 
@@ -1384,7 +1494,7 @@ def swing_path(formatted_map_data, handedness, skill_set):
     head_rotation = 90          # Straight forwards. Lane rotation and
     ave_rotation_queue = deque()
     lane_rotation_data_index = 0
-    current_lane_rotation = lane_rotation_data[lane_rotation_data_index]['rotation']
+    current_lane_rotation = lane_rotation_data[lane_rotation_data_index]['lane_rotation']
 
     # We could simulate acceleration to simulate inertia, but it's not important.
     head_rotation_rate = 45         # In degrees / sec
@@ -1429,7 +1539,7 @@ def swing_path(formatted_map_data, handedness, skill_set):
                         # distance_seconds = beats_to_seconds(distance_beats, metadata['bpm'])
                         time_weight = 0
                 # Add each wall
-                walls_to_avoid.append({'distance_beats': distance_beats, 'position': position, 'rotation': rotation, 'weight': time_weight})
+                walls_to_avoid.append({'distance_beats': distance_beats, 'position': position, 'lane_rotation': rotation, 'weight': time_weight})
         
         bombs_to_avoid = []
         for bomb_of_int in bombs_of_interest:
@@ -1444,7 +1554,7 @@ def swing_path(formatted_map_data, handedness, skill_set):
                     distance_beats = bomb_of_int['beat'] - time_beats + moved_past_head_beat_offset
                     # distance_seconds = beats_to_seconds(distance_beats, metadata['bpm'])
                     time_weight = 0 
-                bombs_to_avoid.append({'distance_beats': distance_beats, 'position': position, 'rotation': rotation, 'weight': time_weight})
+                bombs_to_avoid.append({'distance_beats': distance_beats, 'position': position, 'lane_rotation': rotation, 'weight': time_weight})
                 
         # Not going to use notes to calculate head pos
 
@@ -1454,7 +1564,7 @@ def swing_path(formatted_map_data, handedness, skill_set):
         if time_beats >= lane_rotation_data[lane_rotation_data_index]['beat']:
             if lane_rotation_data[lane_rotation_data_index]['inclusive_flag'] or time_beats > lane_rotation_data[lane_rotation_data_index]['beat']:
                 lane_rotation_data_index += 1
-                current_lane_rotation = lane_rotation_data[lane_rotation_data_index]['rotation']
+                current_lane_rotation = lane_rotation_data[lane_rotation_data_index]['lane_rotation']
 
         if abs(current_lane_rotation - head_rotation) > time_step * head_rotation_rate:
             if current_lane_rotation - head_rotation > 0:
@@ -1464,9 +1574,26 @@ def swing_path(formatted_map_data, handedness, skill_set):
         else:
             head_rotation = current_lane_rotation
 
-        objects_to_avoid = walls_to_avoid + bombs_to_avoid
+        # objects_to_avoid = sorted(walls_to_avoid + bombs_to_avoid, key=lambda d: d['distance_beats'])
         # TODO Run bombs first, then refine with walls_avoid for smooth head pathing. then check walls_miss to make sure all walls are missed
         for wall in walls_to_avoid:
+            wall_middle_X = wall['position']['p0'][0] + np.sin(np.radians(wall['lane_rotation'])) * wall['position']['width'] / 2
+            wall_middle_Y = (wall['position']['p1'][1] - wall['position']['p0'][1]) / 2
+            wall_middle_Z = wall['position']['p0'][2] + np.cos(np.radians(wall['lane_rotation'])) * wall['position']['width'] / 2
+            wall_middle = np.array([wall_middle_X, wall_middle_Y, wall_middle_Z])
+            
+            wall_delta = wall_middle - head_pos 
+            theta_to_player = mod(np.arctan2(wall_delta[2], wall_delta[0]) - wall['lane_rotation'], 360)  # Subtract lane rotation
+            
+            
+            if theta_to_player - head_rotation < 90 or theta_to_player - head_rotation > 270:
+                head_pos[0] += np.cos(np.radians(head_rotation)) * head_position_rate * wall['weight']  # Use head_rotation to calculate the magnitude of XZ movement
+                head_pos[2] += np.sin(np.radians(head_rotation)) * head_position_rate * wall['weight']
+            else:
+                head_pos[0] -= np.cos(np.radians(head_rotation)) * head_position_rate * wall['weight']
+                head_pos[2] -= np.sin(np.radians(head_rotation)) * head_position_rate * wall['weight']
+
+        for bomb in bombs_to_avoid: # TODO verify
             wall_middle_X = wall['position']['p0'][0] + np.cos(np.radians(wall['rotation'])) * wall['position']['width'] / 2  # Here cos and sin are swapped when optimizing mod(wall['rotation'] - 90, 360). the -90 comes from converting game rotation to convential math. I did it this way because I was lazy and adopted the game's rotation notation but reversed (counter-clockwise). TODO make the XZ plane's rotation origins start pointing East (right)
             wall_middle_Y = (wall['position']['p1'][1] - wall['position']['p0'][1]) / 2
             wall_middle_Z = wall['position']['p0'][2] + np.sin(np.radians(wall['rotation'])) * wall['position']['width'] / 2
@@ -1483,8 +1610,6 @@ def swing_path(formatted_map_data, handedness, skill_set):
             else:
                 head_pos[0] -= np.cos(np.radians(head_rotation)) * head_position_rate * wall['weight']
                 head_pos[2] -= np.sin(np.radians(head_rotation)) * head_position_rate * wall['weight']
-
-
             
 
         head_data_at_time_steps.append({})
@@ -1586,7 +1711,7 @@ def techOperations(B_mapData: dict, metadata: dict, isuser=True, verbose=True):
 
 def mapCalculation(mapData, metadata, isuser=True, verbose=True):
     t0 = time.time()
-    newMapData = map_prep(mapData)
+    newMapData = map_prep(mapData, metadata)
     data = techOperations(newMapData, metadata, isuser, verbose)
     t1 = time.time()
     if isuser:
