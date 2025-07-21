@@ -4,6 +4,7 @@ import csv
 import sys
 sys.path.insert(0, 'Tech_Calculator/_BackendFiles')
 import MapDownloader
+from packaging.version import parse
 
 def load_BSPath():
     try:
@@ -82,7 +83,7 @@ def findSongPath(song_id: str, isuser=True): # Returns the song folder path by s
             songFound = True
             break
     if not songFound:
-        # TODO: download from scoresaber if map missing
+        # TODO: download from mirror if map missing
         if isuser:
             print(song_id + " Not Downloaded or wrong song code!")
             print("Would you like to download this song? (Y/N)")
@@ -100,24 +101,59 @@ def findSongPath(song_id: str, isuser=True): # Returns the song folder path by s
                 input()
                 exit()
     return f"{bsPath}/{songFolder}"
+
 def load_json_as_dict(path: str):    # Reads, then loads and returns JSON as a dictionary
     with open(path, 'rb') as json_dat:
         dat = json.loads(json_dat.read())   
         # dat = json.load(json_dat)
     return dat
-def findStandardCharacteristicIndex(infoDat: str, characteristicName: str):
+
+
+def define_info_dat_keywords(infoDat: dict):
+    try:
+        map_version = parse(infoDat['version'])
+    except KeyError:
+        try:
+            map_version = parse(infoDat['_version'])
+        except KeyError:
+            try:
+                infoDat['_songName']
+                map_version = parse('2.1.0')
+            except KeyError:
+                try:
+                    infoDat['song']
+                    map_version = parse('4.0.1')
+                except KeyError:
+                    print("Unknown Map Type. Exiting")
+                    exit()
+
+    info_dat_language = {}
+    info_dat_language['version'] = map_version
+    
+    if map_version < parse('4.0.0'):
+        info_dat_language['difficulties'] = '_difficultyBeatmapSets'
+    else:
+        info_dat_language['difficulties'] = 'difficultyBeatmaps'
+
+    return info_dat_language
+
+def findStandard_V2_CharacteristicIndex(infoDat: dict, characteristicName: str):
     for f in range(0, len(infoDat["_difficultyBeatmapSets"])):
         if infoDat["_difficultyBeatmapSets"][f]['_beatmapCharacteristicName'].lower() == characteristicName.lower():
             return f
 #   Returns a list of all avilable song difficulties from the info.dat file by difficulty number.     
 #   Valid Characteristic names include 'Standard', 'OneSaber', "90Degree", etc
-def findDiffs(songPath: str, characteristic: str = 'Standard'):    # 
-    infoDat = load_json_as_dict(findInfoFile(songPath)) #Load infoDat file for convience
-    characteristicIndex = findStandardCharacteristicIndex(infoDat, characteristic) 
+
+def find_V2_Diffs(songPath: str, infoDat: dict, characteristic: str = 'Standard'):    # 
+    # infoDat = load_json_as_dict(findInfoFile(songPath))
+    characteristicIndex = findStandard_V2_CharacteristicIndex(infoDat, characteristic) 
     difflist = []
     for f in range(0, len(infoDat["_difficultyBeatmapSets"][characteristicIndex]["_difficultyBeatmaps"])):
         difflist.append(infoDat["_difficultyBeatmapSets"][characteristicIndex]["_difficultyBeatmaps"][f]["_difficultyRank"]) #Store all avilable difficulties
     return difflist
+
+
+
 def diffNum_to_diffPath(songPath: str, diffNum: int, characteristic='Standard'):     #Returns the File Path of whichever difficulty under test based on the difficulty Number
     files = os.listdir(songPath)
     fileName = False
@@ -162,6 +198,7 @@ def diffNum_to_diffPath(songPath: str, diffNum: int, characteristic='Standard'):
     if fileName == False:
         return False
     return f"{songPath}/{fileName}"
+
 def findMatchingDiffIndex(diff_options: list, diff_Names: list):
     diff_options = [x.lower() for x in diff_options]    # Make everything lowercase for easier searching
     for f in range(0, len(diff_options)):   #Find the correct index and therefore file name of the desired difficulty
@@ -170,6 +207,7 @@ def findMatchingDiffIndex(diff_options: list, diff_Names: list):
             return f
     print("Diff not found")
     return False
+
 def findInfoFile(songPath: str):
     files = os.listdir(songPath)
     files_lowercase = [x.lower() for x in files]
@@ -179,14 +217,16 @@ def findInfoFile(songPath: str):
             return f"{songPath}/{files[f]}"
     print("Info not found")
     return False 
+
 def loadInfoData(mapID: str, isuser=True):
     songPath = findSongPath(mapID, isuser)
     infoPath = findInfoFile(songPath)
     infoData = load_json_as_dict(infoPath)
     return infoData
+
 def loadMapData(mapID: str, diffNum: int, isuser=True, characteristic='Standard'):
     songPath = findSongPath(mapID, isuser)
-    diffList = findDiffs(songPath, characteristic)
+    diffList = find_V2_Diffs(songPath, characteristic)
     if diffNum in diffList:     # Check if the song is listed in the Info.dat file, otherwise exits programs
         diffPath = diffNum_to_diffPath(songPath, diffNum, characteristic)
         mapData = load_json_as_dict(diffPath)
@@ -197,6 +237,7 @@ def loadMapData(mapID: str, diffNum: int, isuser=True, characteristic='Standard'
             print("Enter to Exit")
             input()
             exit()
+
 def V2_to_V3(V2mapData: dict):    # Convert V2 JSON to V3
     newMapData = {'colorNotes':[], 'bombNotes':[], 'obstacles':[]}  # I have to initialize this before hand or python gets grumpy
     for i in range(0, len(V2mapData['_notes'])):

@@ -356,9 +356,9 @@ def V3_3_0_to_V3_NJS(V3_3_0_map_data: dict, njs: float):
     
 def V3_0_0_to_V3_NJS(V3_0_0_map_data: dict, njs: float):    # This function is identical to function V3_3_0_to_V3_NJS, I made them different functions just because it's easier to read.
     new_map_data = copy.deepcopy(V3_0_0_map_data)
-    for i in range(0, len(new_map_data['bpmEvents'])):
+    for i in range(0, len(new_map_data['bpmEvents'])):          # Not sure if this will be used since I haven't observed any changes in the note data.
         new_map_data['bpmEvents'][i]['b'] = new_map_data['bpmEvents'][i].get('b', 0)
-        new_map_data['bpmEvents'][i]['m'] = new_map_data['bpmEvents'][i].get('m', 0)
+        new_map_data['bpmEvents'][i]['m'] = new_map_data['bpmEvents'][i].get('m', 0)        
 
     # for i in range(0, len(newMapData['rotationEvents'])): Used for lighting
     #     newMapData['rotationEvents'][i]['b'] = newMapData['rotationEvents'][i].get('b', 0)
@@ -417,7 +417,12 @@ def V3_0_0_to_V3_NJS(V3_0_0_map_data: dict, njs: float):    # This function is i
 
     return new_map_data
 
-
+def V4_0_0_to_V3_NJS(V4_0_0_map_data: dict, initial_njs: float):    #TODO develop 4.0.0 to V3
+    
+    
+    
+    
+    return
 
 def map_prep(map_data, metadata):
     try:
@@ -436,6 +441,7 @@ def map_prep(map_data, metadata):
                 except KeyError:
                     print("Unknown Map Type. Exiting")
                     exit()
+    
     njs = metadata['njs']
     if map_version < parse('3.0.0'):  # Try to figure out if the map is the V2 or V3 format
         new_map_data = V2_to_V3_NJS(map_data, njs)  # Convert to V3
@@ -444,7 +450,7 @@ def map_prep(map_data, metadata):
     elif map_version < parse('4.0.0'):       # New 3.3.0 spec omits default values, so we need to fill them in
         new_map_data = V3_3_0_to_V3_NJS(map_data, njs)
     else:
-        # new_map_data = V4_4_0_to_V3(map_data)     #TODO develop 4.0.0 to V3
+        new_map_data = V4_0_0_to_V3_NJS(map_data)
         pass
     
     new_map_data['colorNotes'] = sorted(new_map_data['colorNotes'], key=lambda d: d['b'])   # Sort data by time (beats).
@@ -1721,13 +1727,24 @@ def mapCalculation(mapData, metadata, isuser=True, verbose=True):
 
 if __name__ == "__main__":
     print("input map key")
+    # Manual input mode
     # mapKey = input()
     # mapKey = mapKey.replace("!bsr ", "")
-    mapKey = '38419'
-    characteristic = '90Degree'
+    
+    # 90 Degree testing
+    # mapKey = '38419'
+    # characteristic = '90Degree'
+
+    # VNJS testing
+    mapKey = '48951'
+    characteristic = 'Standard'
 
     infoData = setup.loadInfoData(mapKey)
-    availableDiffs = setup.findDiffs(setup.findSongPath(mapKey), characteristic)
+    info_metadata = setup.define_info_dat_keywords(infoData)
+    if info_metadata['version'] < parse('4.0.0'):
+        availableDiffs = setup.find_V2_Diffs(setup.findSongPath(mapKey), infoData, characteristic)
+    else:
+        availableDiffs = setup.find_V4_Diffs(setup.findSongPath(mapKey), characteristic) # TODO flesh out function
 
     if len(availableDiffs) > 1:
         print(f'Choose Diff num: {availableDiffs}')
